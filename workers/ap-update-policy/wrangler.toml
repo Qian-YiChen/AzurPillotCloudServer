@@ -1,0 +1,19 @@
+name = "ap-update-policy"
+# 更新策略静态 Worker：以完整 URL 路径提供 /api/v2/get/update/* 下的静态文件。
+#
+# 服务器端发布器（Cloudflare Direct Upload REST API）是权威发布通道，
+# 凭据只保存在服务器端；本模板用于初始创建 Worker 与路由绑定，
+# 以及本地 `wrangler dev` 调试。
+
+compatibility_date = "2026-01-01"
+main = "main.js"
+
+[assets]
+directory = "../../public/api/v2/get/update"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+
+# 路由绑定：
+# [[routes]]
+# pattern = "api.example.com/api/v2/get/update/*"
+# zone_name = "example.com"

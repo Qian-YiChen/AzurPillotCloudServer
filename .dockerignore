@@ -1,0 +1,9 @@
+.git
+.github
+dist
+public
+*.md
+docker-compose.yml
+.env
+.env.example
+workers

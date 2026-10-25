@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: apcloud
+      POSTGRES_PASSWORD: apcloud
+      POSTGRES_DB: apcloud
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apcloud -d apcloud"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      LISTEN_ADDR: ":8080"
+      DATABASE_URL: postgres://apcloud:apcloud@postgres:5432/apcloud?sslmode=disable
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-change-me}
+      LOG_LEVEL: info
+      # Cloudflare 发布凭据（可选；未配置时静态文件只生成到本地目录）。
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CF_API_TOKEN: ${CF_API_TOKEN:-}
+      CF_NOTICE_PUBLIC_URL: ${CF_NOTICE_PUBLIC_URL:-}
+      CF_UPDATE_PUBLIC_URL: ${CF_UPDATE_PUBLIC_URL:-}
+    ports:
+      - "8080:8080"
+    volumes:
+      - publish:/app/public
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  publish:
