@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"ap-cloud-server/internal/adminui"
 	"ap-cloud-server/internal/config"
 	"ap-cloud-server/internal/gateway"
 	"ap-cloud-server/internal/httpapi"
@@ -104,11 +105,12 @@ func run() error {
 
 	// 5. HTTP 服务。
 	srv := httpapi.New(httpapi.Deps{
-		Cfg:    cfg,
-		Store:  st,
-		Cache:  cache,
-		Pub:    publisher,
-		Logger: logger,
+		Cfg:     cfg,
+		Store:   st,
+		Cache:   cache,
+		Pub:     publisher,
+		Logger:  logger,
+		AdminUI: adminui.Handler(),
 	})
 	srv.Run(ctx)
 	defer srv.Close()

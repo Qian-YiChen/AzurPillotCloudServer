@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"ap-cloud-server/internal/adminui"
 	"ap-cloud-server/internal/gateway"
 	"ap-cloud-server/internal/store"
 )
@@ -183,6 +184,35 @@ func TestRateLimit(t *testing.T) {
 	if !lim.allow("198.51.100.9") {
 		t.Fatal("其他 IP 不应受影响")
 	}
+}
+
+func TestAdminUIRoutes(t *testing.T) {
+	backend := &fakeBackend{}
+	ui := adminui.Handler()
+	srv, _ := newTestServer(t, backend, nil, ui)
+
+	t.Run("GET /admin 重定向", func(t *testing.T) {
+		rec := get(srv, "/admin", nil)
+		if rec.Code != http.StatusPermanentRedirect {
+			t.Fatalf("期望 308，得到 %d", rec.Code)
+		}
+		if loc := rec.Header().Get("Location"); loc != "/admin/" {
+			t.Fatalf("期望跳转 /admin/，得到 %s", loc)
+		}
+	})
+	t.Run("GET /admin/ 返回前端入口页", func(t *testing.T) {
+		rec := get(srv, "/admin/", nil)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "管理后台") {
+			t.Fatalf("期望 200 与入口页: %d %s", rec.Code, rec.Body.String())
+		}
+	})
+	t.Run("未挂载前端时 404", func(t *testing.T) {
+		srv2, _ := newTestServer(t, &fakeBackend{}, nil)
+		rec := get(srv2, "/admin/", nil)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("期望 404，得到 %d", rec.Code)
+		}
+	})
 }
 
 func TestAdminAuth(t *testing.T) {

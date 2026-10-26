@@ -99,6 +99,31 @@ Cloudflare-Workers-Version-Key: <与设备ID相同>
 | PUT/DELETE | `/api/v1/admin/maintenance/{server}` | 设置/删除区服维护计划 |
 | GET | `/api/v1/admin/publish/status` | 每个 Worker 最近一次发布状态 |
 
+### 管理后台 Web UI（React）
+
+服务端内嵌一个 React 管理后台，挂在 **`/admin`**（如 `http://127.0.0.1:8080/admin/`），
+与二进制一同分发，无需单独部署前端：
+
+- **Token 登录**：输入服务端 `ADMIN_TOKEN`，凭据只保存在浏览器 localStorage；
+- **公告管理**：发布（自动触发公告 Worker 发布）、撤回（发布 `announcement: null`）；
+- **更新策略**：`force_update` 开关，保存即发布；
+- **维护计划**：国服/国际服/日服/台服四张卡片，datetime-local 本地时间输入、自动转 RFC 3339；
+- **发布状态**：每个 Worker 最近一次发布结果（成功 / 仅本地 / 失败 + 错误），30 秒自动刷新；
+- 401 自动回到登录页；服务端未配置 `ADMIN_TOKEN` 时给出明确提示。
+
+开发与构建（React 18 + Vite + TypeScript，无 UI 框架依赖）：
+
+```bash
+cd web
+npm install
+npm run dev      # 开发模式：http://localhost:5173，/api 代理到 127.0.0.1:8080
+npm run build    # 产物输出到 internal/adminui/dist，随后 go build 完成嵌入
+```
+
+或一键构建完整二进制：`make all`。CI 中前端单独构建（类型检查 + 打包），
+产物下载后参与五平台交叉编译；Docker 镜像包含独立的 Node 构建阶段。
+前端未构建时服务仍可编译运行（`-tags noadminui` 可显式排除），访问 `/admin` 会得到构建指引占位页。
+
 ## Cloudflare 发布
 
 两个静态 Worker（`ap-notice`、`ap-update-policy`）分别以

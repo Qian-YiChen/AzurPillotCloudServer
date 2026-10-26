@@ -1,4 +1,4 @@
-.PHONY: build test race vet lint run docker-up docker-down clean
+.PHONY: build test race vet lint run web-install web-dev web-build docker-up docker-down clean
 
 build:
 	go build -o bin/ap-cloud-server$(shell go env GOEXE) ./cmd/server
@@ -21,6 +21,19 @@ lint:
 
 run:
 	go run ./cmd/server
+
+web-install:
+	cd web && npm install
+
+web-dev:
+	cd web && npm run dev
+
+# 构建前端并输出到 internal/adminui/dist（随后重新 go build 即完成嵌入）
+web-build:
+	cd web && npm run build
+
+# 一键构建包含管理后台的完整二进制
+all: web-build build
 
 docker-up:
 	docker compose up -d --build

@@ -38,6 +38,8 @@ type Deps struct {
 	Cache  *statuscache.Cache
 	Pub    *publish.Publisher
 	Logger *slog.Logger
+	// AdminUI 是管理后台前端处理器（internal/adminui.Handler() 提供）；nil 时退回 404。
+	AdminUI http.Handler
 	// Now 可注入时钟，测试用；nil 时使用 time.Now。
 	Now func() time.Time
 }
@@ -98,6 +100,11 @@ func New(deps Deps) *Server {
 	mux.HandleFunc("/api/v1/admin/maintenance", s.adminAuth(s.handleAdminMaintenance))
 	mux.HandleFunc("/api/v1/admin/maintenance/{server}", s.adminAuth(s.handleAdminMaintenance))
 	mux.HandleFunc("/api/v1/admin/publish/status", s.adminAuth(s.handleAdminPublishStatus))
+	// 管理后台前端（React 构建产物，见 web/ 与 internal/adminui）。
+	mux.Handle("GET /admin", http.RedirectHandler("/admin/", http.StatusPermanentRedirect))
+	if deps.AdminUI != nil {
+		mux.Handle("GET /admin/", deps.AdminUI)
+	}
 	// 兜底：统一 404 错误信封。
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, apiError{

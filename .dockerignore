@@ -7,3 +7,5 @@ docker-compose.yml
 .env
 .env.example
 workers
+web/node_modules
+internal/adminui/dist

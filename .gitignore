@@ -2,3 +2,5 @@ bin/
 dist/
 .env
 *.log
+web/node_modules/
+internal/adminui/dist/

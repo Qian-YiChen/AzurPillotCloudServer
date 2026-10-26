@@ -1,0 +1,340 @@
+/* AzurPilot 管理后台 —— 深色单主题，无 UI 框架依赖。 */
+
+:root {
+  --bg: #0f1419;
+  --bg-panel: #161d24;
+  --bg-input: #0c1014;
+  --border: #2a3540;
+  --text: #dbe4ec;
+  --text-dim: #8494a3;
+  --accent: #3d9be9;
+  --accent-hover: #55a9ef;
+  --ok: #2ea86b;
+  --warn: #c99a2e;
+  --err: #d4483f;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+h2 {
+  font-size: 15px;
+  margin: 0;
+}
+
+code {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.muted {
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+.dim {
+  color: var(--text-dim);
+  font-weight: normal;
+}
+
+/* ===== 登录页 ===== */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-card {
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 28px;
+}
+
+/* ===== 布局 ===== */
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 12px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+.brand {
+  padding: 0 10px 18px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.nav-item small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.nav-item:hover {
+  background: var(--bg-input);
+}
+.nav-item.active {
+  background: var(--accent);
+  color: #fff;
+}
+.nav-item.active small {
+  color: rgba(255, 255, 255, 0.75);
+}
+.sidebar footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.content {
+  flex: 1;
+  padding: 24px 28px;
+  max-width: 980px;
+}
+
+/* ===== 卡片 ===== */
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+}
+.grid .card {
+  margin-bottom: 0;
+}
+
+/* ===== 表格 ===== */
+table.detail {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.detail th,
+table.detail td {
+  text-align: left;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.detail th {
+  color: var(--text-dim);
+  font-weight: normal;
+  width: 96px;
+  white-space: nowrap;
+}
+.pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ===== 表单 ===== */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.stack label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+.stack label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+input,
+textarea {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+  outline: none;
+}
+input:focus,
+textarea:focus {
+  border-color: var(--accent);
+}
+textarea {
+  resize: vertical;
+}
+input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+input[type='datetime-local'] {
+  color-scheme: dark;
+}
+
+/* ===== 按钮 ===== */
+button {
+  font: inherit;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button.danger {
+  background: none;
+  border: 1px solid var(--err);
+  color: var(--err);
+}
+button.danger:hover:not(:disabled) {
+  background: rgba(212, 72, 63, 0.12);
+}
+button.ghost {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+button.ghost:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+}
+
+/* ===== 状态与提示 ===== */
+.pills {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  min-height: 0;
+}
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 3px 12px;
+}
+.pill-ok {
+  background: rgba(46, 168, 107, 0.15);
+  color: var(--ok);
+}
+.pill-warn {
+  background: rgba(201, 154, 46, 0.15);
+  color: var(--warn);
+}
+.pill-err {
+  background: rgba(212, 72, 63, 0.15);
+  color: var(--err);
+}
+
+.form-ok {
+  color: var(--ok);
+  font-size: 13px;
+  margin: 0;
+}
+.form-err {
+  color: var(--err);
+  font-size: 13px;
+  margin: 0;
+}
+.banner {
+  background: rgba(201, 154, 46, 0.12);
+  border: 1px solid rgba(201, 154, 46, 0.4);
+  color: var(--warn);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ===== 窄屏 ===== */
+@media (max-width: 720px) {
+  .layout {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+  }
+  .content {
+    padding: 16px;
+  }
+}

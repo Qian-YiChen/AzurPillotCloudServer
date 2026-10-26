@@ -69,6 +69,16 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: 构建管理后台前端
+        working-directory: web
+        run: |
+          npm ci
+          npm run build -- --outDir ../internal/adminui/dist
       - name: 构建
         env:
           GOOS: ${{ matrix.goos }}

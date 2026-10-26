@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -87,7 +88,7 @@ func (f *fakeBackend) LatestPublishByWorker(ctx context.Context) (map[string]sto
 }
 
 // newTestServer 构造被测服务：假存储、可编程缓存、真实发布器（无 CF 凭据）。
-func newTestServer(t *testing.T, backend *fakeBackend, query statuscache.QueryFunc) (*Server, string) {
+func newTestServer(t *testing.T, backend *fakeBackend, query statuscache.QueryFunc, adminUI ...http.Handler) (*Server, string) {
 	t.Helper()
 	dir := t.TempDir()
 	cfg := config.Config{
@@ -114,13 +115,17 @@ func newTestServer(t *testing.T, backend *fakeBackend, query statuscache.QueryFu
 	publisher.Run(context.Background())
 	t.Cleanup(publisher.Close)
 
-	srv := New(Deps{
+	deps := Deps{
 		Cfg:   cfg,
 		Store: backend,
 		Cache: cache,
 		Pub:   publisher,
 		Now:   func() time.Time { return time.Date(2026, 10, 26, 10, 0, 1, 0, time.UTC) },
-	})
+	}
+	if len(adminUI) > 0 {
+		deps.AdminUI = adminUI[0]
+	}
+	srv := New(deps)
 	srv.Run(context.Background())
 	t.Cleanup(srv.Close)
 	return srv, dir
