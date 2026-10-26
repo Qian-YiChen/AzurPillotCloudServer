@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, ApiError, getToken, setToken } from '../api'
+import { Logo } from '../ui'
 
 // Token 登录页：凭据只保存在浏览器 localStorage。
 export function Login({ onLogin }: { onLogin: () => void }) {
@@ -37,7 +38,10 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           void connect()
         }}
       >
-        <h1>AzurPilot 管理后台</h1>
+        <div className="brand login-brand">
+          <Logo size={30} />
+          <h1>AzurPilot 管理后台</h1>
+        </div>
         <p className="muted">使用服务端配置的 ADMIN_TOKEN 登录，凭据仅保存在本浏览器。</p>
         <input
           type="password"
@@ -48,7 +52,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         />
         {error && <p className="form-err">{error}</p>}
         <button type="submit" disabled={busy || !token.trim()}>
-          {busy ? '连接中…' : '连接'}
+          {busy ? '连接中…' : '登录'}
         </button>
       </form>
     </div>

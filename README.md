@@ -124,6 +124,10 @@ npm run build    # 产物输出到 internal/adminui/dist，随后 go build 完�
 产物下载后参与五平台交叉编译；Docker 镜像包含独立的 Node 构建阶段。
 前端未构建时服务仍可编译运行（`-tags noadminui` 可显式排除），访问 `/admin` 会得到构建指引占位页。
 
+**设计规范**：UI 遵循 [DESIGN.md](DESIGN.md)（[awesome-design-md](https://github.com/VoltAgent/awesome-design-md)
+格式，Cloudflare Dashboard 设计语言：浅色画布、白卡片细边框、橙色仅用于 Logo、操作蓝用于全部交互、
+软色语义徽章）。调整 UI 前先读该文件；新增页面按其中的组件规范实现。
+
 ## Cloudflare 发布
 
 两个静态 Worker（`ap-notice`、`ap-update-policy`）分别以

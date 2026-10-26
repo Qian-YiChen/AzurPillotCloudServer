@@ -5,6 +5,7 @@ import { AnnouncementView } from './views/AnnouncementView'
 import { UpdatePolicyView } from './views/UpdatePolicyView'
 import { MaintenanceView } from './views/MaintenanceView'
 import { PublishStatusView } from './views/PublishStatusView'
+import { Logo } from './ui'
 
 type Section = 'announcement' | 'update-policy' | 'maintenance' | 'publish'
 
@@ -14,6 +15,13 @@ const SECTIONS: Array<{ key: Section; label: string; hint: string }> = [
   { key: 'maintenance', label: '维护计划', hint: '区服维护安排' },
   { key: 'publish', label: '发布状态', hint: '静态文件发布结果' },
 ]
+
+const SECTION_TITLES: Record<Section, string> = {
+  announcement: '公告管理',
+  'update-policy': '更新策略',
+  maintenance: '维护计划',
+  publish: '发布状态',
+}
 
 export function App() {
   const [authed, setAuthed] = useState(() => getToken() !== '')
@@ -29,7 +37,7 @@ export function App() {
   }, [])
 
   if (!authed) {
-    return <Login onLogin={() => setAuthed(true)} />
+    return <Login onLogin={() => { setBanner(null); setAuthed(true) }} />
   }
 
   const logout = () => {
@@ -38,46 +46,51 @@ export function App() {
   }
 
   return (
-    <div className="layout">
-      <aside className="sidebar">
+    <div className="shell">
+      <header className="topbar">
         <div className="brand">
-          <h1>AzurPilot</h1>
-          <span className="muted">云服务管理后台</span>
+          <Logo />
+          <strong>AzurPilot</strong>
+          <span className="crumb">管理后台 / {SECTION_TITLES[section]}</span>
         </div>
-        <nav>
-          {SECTIONS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              className={section === s.key ? 'nav-item active' : 'nav-item'}
-              onClick={() => setSection(s.key)}
-            >
-              <span>{s.label}</span>
-              <small>{s.hint}</small>
-            </button>
-          ))}
-        </nav>
-        <footer>
-          <button type="button" className="ghost" onClick={logout}>
-            退出登录
-          </button>
-        </footer>
-      </aside>
+        <button type="button" className="ghost" onClick={logout}>
+          退出登录
+        </button>
+      </header>
 
-      <main className="content">
-        {banner && (
-          <p className="banner">
-            {banner}{' '}
-            <button type="button" className="ghost" onClick={() => setBanner(null)}>
-              关闭
-            </button>
-          </p>
-        )}
-        {section === 'announcement' && <AnnouncementView />}
-        {section === 'update-policy' && <UpdatePolicyView />}
-        {section === 'maintenance' && <MaintenanceView />}
-        {section === 'publish' && <PublishStatusView />}
-      </main>
+      <div className="layout">
+        <aside className="sidebar">
+          <nav>
+            <p className="nav-group">运营管理</p>
+            {SECTIONS.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                className={section === s.key ? 'nav-item active' : 'nav-item'}
+                onClick={() => setSection(s.key)}
+              >
+                <span>{s.label}</span>
+                <small>{s.hint}</small>
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        <main className="content">
+          {banner && (
+            <p className="banner">
+              {banner}{' '}
+              <button type="button" className="ghost" onClick={() => setBanner(null)}>
+                关闭
+              </button>
+            </p>
+          )}
+          {section === 'announcement' && <AnnouncementView />}
+          {section === 'update-policy' && <UpdatePolicyView />}
+          {section === 'maintenance' && <MaintenanceView />}
+          {section === 'publish' && <PublishStatusView />}
+        </main>
+      </div>
     </div>
   )
 }
