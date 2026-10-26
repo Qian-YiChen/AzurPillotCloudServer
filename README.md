@@ -37,7 +37,8 @@ cp .env.example .env   # 按需修改
 go run ./cmd/server
 
 # Docker Compose（server + postgres）
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 
 # 测试（无 PG 时自动跳过集成用例）
 go test ./...
@@ -45,6 +46,8 @@ go test ./...
 # 完整集成测试
 TEST_DATABASE_URL="postgres://postgres:postgres@localhost:5432/apcloud_test?sslmode=disable" go test -count=1 ./...
 ```
+
+Docker 镜像为 `ghcr.io/wess09/azurpillotcloudserver:latest`，内含管理后台，支持 Linux amd64/arm64。主分支发布 `latest / main / sha-<完整提交号>`；版本标签由 Release 工作流发布。Compose 的 `STATISTICS_IMAGE` 可固定版本；开发时使用 `docker compose up -d --build`。数据库 `pgdata` 和静态文件 `publish` 使用独立持久化卷。
 
 ## API 契约
 

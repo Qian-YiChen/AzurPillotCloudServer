@@ -14,6 +14,16 @@
 
 ## 配置与部署顺序
 
+三个服务均提供 GHCR 镜像，不需要在服务器上编译；各仓库复制 `.env.example` 为 `.env` 并配置后，执行 `docker compose pull` 和 `docker compose up -d`：
+
+| 节点 | 镜像 |
+|---|---|
+| A | `ghcr.io/wess09/azurpilotuploadserver:latest` |
+| B | `ghcr.io/wess09/azurpilotstatsworker:latest` |
+| C | `ghcr.io/wess09/azurpillotcloudserver:latest` |
+
+`main` 跟踪主分支，`sha-<完整提交号>` 固定内容；正式版本可使用版本标签。更新时重新拉取镜像并重建容器，保留数据卷。B 已包含固定客户端源码、模板和 CPU OCR 模型；Docker 部署不需宿主机 Alas/Python。只有原生运行 B 时才需要下面的 `ALAS_ROOT / ALAS_PYTHON` 配置。
+
 1. C 按现有 Docker Compose 启动 PostgreSQL 和服务，配置 `ADMIN_TOKEN` 与独立的 `STATISTICS_TOKEN`。新 SQL 迁移随服务启动执行；升级前备份数据库。
 2. B 按其 README 配置 `STATISTICS_URL`、相同 `STATISTICS_TOKEN`、123 盘开放平台凭据和可用的 `ALAS_ROOT`/`ALAS_PYTHON`。启动单进程，再用已有 Cloudflare Tunnel 暴露 HTTP/WebSocket 8091 端口，应用层使用 `WORKER_TOKEN` 鉴权。
 3. A 配置相同 `WORKER_TOKEN`、B 的 `wss://.../internal/v1/batches` 和 123 盘凭据，启动两路上传进程。A 的完整组 HTTP 请求可达 500 MiB，应使用允许该大小的 HTTPS 入口。

@@ -14,6 +14,7 @@ services:
       retries: 10
 
   server:
+    image: ${STATISTICS_IMAGE:-ghcr.io/wess09/azurpillotcloudserver:latest}
     build: .
     depends_on:
       postgres:
