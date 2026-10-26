@@ -10,7 +10,7 @@
 | B，本地识别 | `AzurPilotStatsWorker` | SQLite 任务、结构化结果、模板版本、诊断 |
 | C，当前仓库 | `AzurPillotCloudServer` | PostgreSQL 结果历史、当前统计贡献、候选小图、模板和管理状态 |
 
-123 盘保存长期原图。A 云盘上传完成即删除本地副本；B 在处理结束/失败后删除工作图片，重试重新下载；C 不保存完整截图。A 不满 30 份就等待，模板重跑和试识别不受此门槛限制。
+123 盘保存长期原图。A 云盘上传完成即删除本地副本；B 在处理结束/失败后删除工作图片，重试重新下载；C 不保存完整截图。A 每 30 分钟派发，模板重跑和试识别不受此调度限制。
 
 ## 配置与部署顺序
 
@@ -25,8 +25,8 @@
 `main` 跟踪主分支，`sha-<完整提交号>` 固定内容；正式版本可使用版本标签。更新时重新拉取镜像并重建容器，保留数据卷。B 已包含固定客户端源码、模板和 CPU OCR 模型；Docker 部署不需宿主机 Alas/Python。只有原生运行 B 时才需要下面的 `ALAS_ROOT / ALAS_PYTHON` 配置。
 
 1. C 按现有 Docker Compose 启动 PostgreSQL 和服务，配置 `ADMIN_TOKEN` 与独立的 `STATISTICS_TOKEN`。新 SQL 迁移随服务启动执行；升级前备份数据库。
-2. B 按其 README 配置 `STATISTICS_URL`、相同 `STATISTICS_TOKEN`、123 盘开放平台凭据和可用的 `ALAS_ROOT`/`ALAS_PYTHON`。启动单进程，再用已有 Cloudflare Tunnel 暴露 HTTP/WebSocket 8091 端口，应用层使用 `WORKER_TOKEN` 鉴权。
-3. A 配置相同 `WORKER_TOKEN`、B 的 `wss://.../internal/v1/batches` 和 123 盘凭据，启动两路上传进程。经过 Cloudflare Tunnel 时，客户端使用 `POST /api/v1/uploads/init` 登记完整元数据，逐文件 `PUT /api/v1/uploads/{upload_id}/files/{index}`，最后 `POST /api/v1/uploads/{upload_id}/complete`。每个图片请求最多 10 MiB，整组仍可达 500 MiB；具体重试协议见 [A 的上传文档](https://github.com/wess09/AzurPilotUploadServer#上传协议)。兼容的整组 multipart 请求需要允许至少 502 MiB 的 HTTPS 入口，不能直接经过免费套餐的 100 MB 请求上限。
+2. B 按其 README 配置 `STATISTICS_URL`、相同 `STATISTICS_TOKEN`、123 盘开放平台凭据和可用的 `ALAS_ROOT`/`ALAS_PYTHON`。设置 `UPLOADER_WS_URL` 主动连接 A，应用层使用 `WORKER_TOKEN` 鉴权。A 只有 HTTP/NAT 入口时，通过 [SSH 本地转发](https://github.com/wess09/AzurPilotStatsWorker/blob/main/deploy/reverse-ssh.md) 加密此连接；无需新增公网映射。B 的 Cloudflare Tunnel 仍用于 C 的预览接口。
+3. A 配置相同 `WORKER_TOKEN`、`WORKER_MODE=reverse`、`BATCH_INTERVAL=30m` 和 123 盘凭据，启动两路上传进程。经过 Cloudflare Tunnel 时，客户端使用 `POST /api/v1/uploads/init` 登记完整元数据，逐文件 `PUT /api/v1/uploads/{upload_id}/files/{index}`，最后 `POST /api/v1/uploads/{upload_id}/complete`。每个图片请求最多 10 MiB，整组仍可达 500 MiB；具体重试协议见 [A 的上传文档](https://github.com/wess09/AzurPilotUploadServer#上传协议)。兼容的整组 multipart 请求需要允许至少 502 MiB 的 HTTPS 入口，不能直接经过免费套餐的 100 MB 请求上限。
 4. C 若要按需查看原始帧，配置 `RECOGNIZER_URL=https://B域名`、`WORKER_TOKEN`。若 B 还经过 Cloudflare Access，必须让该服务请求通过相应 Access 策略。
 5. 打开 `/admin/` 的“识别概览”“待分类模板”“模板库”，确认 B 在线，先试识别再发布。
 
@@ -36,13 +36,15 @@
 
 ## A → B 协议 v1
 
-A 建立受认证 WebSocket，发送以下消息。默认每批严格 30 项，B 允许 1–30 项以支持小批测试。消息最大 16 MiB，不含原图。
+B 主动建立到 A 的受认证 WebSocket，A 通过同一连接发送以下消息。每小时 :00/:30，将完整上传的唯一组登记为固定待发队列；1 份也发送，空时段不发。单条消息最多 30 份，较大时段拆为多条，末条允许不足 30 份。消息最大 16 MiB，不含原图。
 
 ```json
 {
   "type": "batch_ready",
   "protocol_version": 1,
   "batch_id": "0123456789abcdef0123456789abcdef",
+  "window_start": "2026-10-26T11:30:00Z",
+  "window_end": "2026-10-26T12:00:00Z",
   "items": [{
     "sha256": "图片组的64位小写哈希",
     "metadata": {
@@ -66,7 +68,7 @@ A 建立受认证 WebSocket，发送以下消息。默认每批严格 30 项，B
 {"type":"batch_accepted","batch_id":"0123456789abcdef0123456789abcdef"}
 ```
 
-ACK 丢失时 A 重连后补发原批次 ID；B 对同 ID 不同正文拒绝接收，对相同批次重复确认。云盘文件确认完成前，组不能成为可派发样本。WSS 每 25 秒保活，A 在断开后重连。
+ACK 丢失时 B 重连，A 补发原批次 ID；B 对同 ID 不同正文拒绝接收，对相同批次重复确认。云盘文件确认完成前，组不能成为可派发样本。连接每 25 秒保活，B 在断开后每 5 秒重连；重启恢复队列及调度时间。兼容模式可让 A 设置 `WORKER_MODE=forward` 主动连接旧的 B 接口。
 
 ## B → C 结果与回执
 
@@ -98,9 +100,13 @@ C 按组哈希事务串行：初版从 1 开始，更正必须是当前版本 +1
 - `GET /api/v2/get/research`
 - `GET /api/v2/get/drop`
 
-可选参数 `from / to` 为带时区 RFC3339，区间 `[from,to)`，默认最近 30 天，最大 366 天；支持 `server / scene / series / project` 筛选。返回 `groups / items / daily`；每天按 UTC 分组。查询返回当前有效版本，月度查询使用自然月起止时间，不会把历月重复累加。
+可选参数 `from / to` 为带时区 RFC3339，区间 `[from,to)`，默认最近 30 天，最大 366 天；支持 `server / scene / series / focus_series / project` 筛选。返回 `groups / items / daily`；每天按 UTC 分组。查询返回当前有效版本，月度查询使用自然月起止时间，不会把历月重复累加。
 
-`groups.appearance_rate` 为科研出现次数占筛选后全部出现次数的比例。物品 `amount` 是总数量，`occurrences` 是出现该物品的完成事件数，`samples` 包含未掉该物品的完成事件，`drop_rate=occurrences/samples`，`average_per_sample=amount/samples`。`amount_per_hour` 仅计算有时长的事件；无可用时长返回 null。物品标识来自模板名称，显示名称、物品所属期数与科研项目期数分别存储。
+`GET /api/v2/get/research/time-slots`（通用掉落对应 `/api/v2/get/drop/time-slots`）按一天内的 48 个半小时时段汇总，默认 `timezone=Asia/Shanghai`，支持 IANA 时区和同样的筛选。返回 `slots`，含 `slot_index / slot_start / series / project / scene / appearances / samples / total_appearances / appearance_rate`。科研出现占比 = 当前项目在该时段的出现次数 ÷ 该时段符合区服、场景、期数、科研倾向筛选的全部出现次数；筛选项目只裁剪返回行，不缩小分母。空时段省略，不代表出现概率为零。
+
+统计统一依据原始 `collected_at`；派发时段、识别完成时间、迟到上报和模板重跑不能改变样本归属时段。`window_start/window_end` 仅标识传输批次的派发时段。科研出现记录与掉落样本的分离参考 [统计局科研项目解析](https://github.com/LmeSzinc/azur-stats-server/blob/3a743f091b0a98d42a8dc04c3d16be9552a9c7d6/AzurStats/scene/research_projects.py) 和 [科研掉落统计](https://github.com/LmeSzinc/azur-stats-server/blob/3a743f091b0a98d42a8dc04c3d16be9552a9c7d6/AzurStats/stats/research_items.py)，半小时调度与分时 API 是本系统扩展。
+
+`groups.appearance_rate` 为科研出现次数占相同筛选下全部出现次数的比例，分母不受项目筛选影响。物品 `amount` 是总数量，`occurrences` 是出现该物品的完成事件数，`samples` 包含未掉该物品的完成事件，`drop_rate=occurrences/samples`，`average_per_sample=amount/samples`。`amount_per_hour` 仅计算有时长的事件；无可用时长返回 null。物品标识来自模板名称，显示名称、物品所属期数与科研项目期数分别存储。
 
 ## 模板闭环与管理 API
 

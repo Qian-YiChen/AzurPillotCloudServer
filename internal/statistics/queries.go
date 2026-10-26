@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -30,7 +31,7 @@ func collect(rows pgx.Rows) ([]map[string]any, error) {
 func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for k, v := range q {
-		if len(v) != 1 || !strings.Contains("|from|to|server|scene|series|project|", "|"+k+"|") {
+		if len(v) != 1 || !strings.Contains("|from|to|server|scene|series|project|focus_series|timezone|", "|"+k+"|") {
 			fail(w, 400, "VALIDATION_ERROR", "无效筛选参数")
 			return
 		}
@@ -60,22 +61,60 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	focus := 0
+	if q.Get("focus_series") != "" {
+		focus, e = strconv.Atoi(q.Get("focus_series"))
+		if e != nil || focus < 1 || focus > 100 {
+			fail(w, 400, "VALIDATION_ERROR", "无效科研倾向期数")
+			return
+		}
+	}
+	zone := q.Get("timezone")
+	if zone == "" {
+		zone = "Asia/Shanghai"
+	}
+	if _, e = time.LoadLocation(zone); e != nil {
+		fail(w, 400, "VALIDATION_ERROR", "无效时区")
+		return
+	}
 	if !from.Before(to) || to.Sub(from) > 366*24*time.Hour {
 		fail(w, 400, "VALIDATION_ERROR", "查询范围必须在 366 天以内")
 		return
 	}
 	kind := "drop"
-	if strings.HasSuffix(r.URL.Path, "research") {
+	if strings.Contains(r.URL.Path, "/research") {
 		kind = "research"
 	}
-	args := []any{kind, from, to, q.Get("server"), q.Get("scene"), series, q.Get("project")}
-	filtered := `WITH filtered AS (SELECT * FROM stat_events WHERE kind=$1 AND occurred_at >=$2 AND occurred_at<$3 AND ($4='' OR server=$4) AND ($5='' OR scene=$5) AND ($6::int=0 OR series=$6) AND ($7='' OR project=$7)) `
+	args := []any{kind, from, to, q.Get("server"), q.Get("scene"), series, q.Get("project"), focus}
+	filtered := `WITH base AS (SELECT * FROM stat_events WHERE kind=$1 AND occurred_at >=$2 AND occurred_at<$3 AND ($4='' OR server=$4) AND ($5='' OR scene=$5) AND ($6::int=0 OR series=$6) AND ($8::int=0 OR focus_series=$8)),filtered AS (SELECT * FROM base WHERE ($7='' OR project=$7)) `
 	tx, e := s.Pool.BeginTx(r.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if e != nil {
 		internal(w, e)
 		return
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
+	if strings.HasSuffix(r.URL.Path, "/time-slots") {
+		rows, err := tx.Query(r.Context(), filtered+`,bucketed AS (SELECT *, (extract(hour FROM occurred_at AT TIME ZONE $9)*2+floor(extract(minute FROM occurred_at AT TIME ZONE $9)/30))::int AS slot FROM base),totals AS (SELECT slot,count(*) FILTER(WHERE event_type='refresh') AS appearances FROM bucketed GROUP BY slot) SELECT b.slot AS slot_index,to_char(make_time(b.slot/2,(b.slot%2)*30,0),'HH24:MI') AS slot_start,b.series,b.project,b.scene,count(*) FILTER(WHERE b.event_type='refresh') AS appearances,count(*) FILTER(WHERE b.event_type<>'refresh') AS samples,t.appearances AS total_appearances,COALESCE((count(*) FILTER(WHERE b.event_type='refresh'))::float8/NULLIF(t.appearances,0),0) AS appearance_rate FROM bucketed b JOIN totals t USING(slot) WHERE ($7='' OR b.project=$7) GROUP BY b.slot,b.series,b.project,b.scene,t.appearances ORDER BY b.slot,b.series,b.project,b.scene LIMIT 10001`, append(args, zone)...)
+		if err != nil {
+			internal(w, err)
+			return
+		}
+		slots, err := collect(rows)
+		if err != nil {
+			internal(w, err)
+			return
+		}
+		if len(slots) > 10000 {
+			fail(w, 400, "QUERY_TOO_BROAD", "请缩小时段筛选范围")
+			return
+		}
+		if err = tx.Commit(r.Context()); err != nil {
+			internal(w, err)
+			return
+		}
+		output(w, 200, map[string]any{"schema_version": 2, "from": from, "to": to, "timezone": zone, "interval_minutes": 30, "slots": slots})
+		return
+	}
 	rows, e := tx.Query(r.Context(), filtered+`SELECT series,project,scene,count(*) FILTER(WHERE event_type='refresh') AS appearances,count(*) FILTER(WHERE event_type<>'refresh') AS samples,COALESCE(sum(duration_seconds) FILTER(WHERE event_type<>'refresh'),0)::bigint AS duration_seconds FROM filtered GROUP BY series,project,scene ORDER BY series,project,scene LIMIT 1001`, args...)
 	if e != nil {
 		internal(w, e)
@@ -114,13 +153,14 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 		internal(w, e)
 		return
 	}
-	if e = tx.Commit(r.Context()); e != nil {
+	var appearances int64
+	if e = tx.QueryRow(r.Context(), filtered+`SELECT count(*) FROM base WHERE event_type='refresh'`, args...).Scan(&appearances); e != nil {
 		internal(w, e)
 		return
 	}
-	var appearances int64
-	for _, g := range groups {
-		appearances += g["appearances"].(int64)
+	if e = tx.Commit(r.Context()); e != nil {
+		internal(w, e)
+		return
 	}
 	for _, g := range groups {
 		rate := 0.0

@@ -93,7 +93,9 @@ func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("POST /internal/v1/worker/sync", s.auth(s.Token, s.syncWorker))
 	m.HandleFunc("GET /internal/v1/template-releases/{id}", s.auth(s.Token, s.release))
 	m.HandleFunc("GET /api/v2/get/research", s.summary)
+	m.HandleFunc("GET /api/v2/get/research/time-slots", s.summary)
 	m.HandleFunc("GET /api/v2/get/drop", s.summary)
+	m.HandleFunc("GET /api/v2/get/drop/time-slots", s.summary)
 	for _, route := range []string{"GET /api/v1/admin/statistics/overview", "GET /api/v1/admin/statistics/results", "GET /api/v1/admin/template-candidates", "GET /api/v1/admin/templates", "GET /api/v1/admin/template-releases", "GET /api/v1/admin/worker-commands"} {
 		m.HandleFunc(route, s.auth(s.Admin, s.adminList))
 	}
