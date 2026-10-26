@@ -26,6 +26,7 @@ import (
 	"ap-cloud-server/internal/gateway"
 	"ap-cloud-server/internal/httpapi"
 	"ap-cloud-server/internal/publish"
+	"ap-cloud-server/internal/statistics"
 	"ap-cloud-server/internal/statuscache"
 	"ap-cloud-server/internal/store"
 	"ap-cloud-server/internal/version"
@@ -92,8 +93,7 @@ func run() error {
 
 	// 4. 清理协程（去重记录过期等）。
 	cleanupCtx, cleanupCancel := context.WithCancel(context.WithoutCancel(ctx))
-	var janitorDone chan struct{}
-	janitorDone = make(chan struct{})
+	janitorDone := make(chan struct{})
 	go func() {
 		defer close(janitorDone)
 		runJanitor(cleanupCtx, st, cfg.JanitorInterval, logger)
@@ -105,12 +105,13 @@ func run() error {
 
 	// 5. HTTP 服务。
 	srv := httpapi.New(httpapi.Deps{
-		Cfg:     cfg,
-		Store:   st,
-		Cache:   cache,
-		Pub:     publisher,
-		Logger:  logger,
-		AdminUI: adminui.Handler(),
+		Statistics: statistics.New(st.Pool, cfg.StatisticsToken, cfg.AdminToken).WithWorker(cfg.RecognizerURL, cfg.WorkerToken).WithLimits(cfg.StatisticsFileBytes, cfg.StatisticsGroupBytes),
+		Cfg:        cfg,
+		Store:      st,
+		Cache:      cache,
+		Pub:        publisher,
+		Logger:     logger,
+		AdminUI:    adminui.Handler(),
 	})
 	srv.Run(ctx)
 	defer srv.Close()

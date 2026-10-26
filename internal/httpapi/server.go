@@ -8,6 +8,7 @@ import (
 
 	"ap-cloud-server/internal/config"
 	"ap-cloud-server/internal/publish"
+	"ap-cloud-server/internal/statistics"
 	"ap-cloud-server/internal/statuscache"
 	"ap-cloud-server/internal/store"
 )
@@ -33,11 +34,12 @@ type Backend interface {
 
 // Deps 是 HTTP 服务依赖。
 type Deps struct {
-	Cfg    config.Config
-	Store  Backend
-	Cache  *statuscache.Cache
-	Pub    *publish.Publisher
-	Logger *slog.Logger
+	Statistics *statistics.Service
+	Cfg        config.Config
+	Store      Backend
+	Cache      *statuscache.Cache
+	Pub        *publish.Publisher
+	Logger     *slog.Logger
 	// AdminUI 是管理后台前端处理器（internal/adminui.Handler() 提供）；nil 时退回 404。
 	AdminUI http.Handler
 	// Now 可注入时钟，测试用；nil 时使用 time.Now。
@@ -94,6 +96,9 @@ func New(deps Deps) *Server {
 	mux.HandleFunc("/api/v2/get/server", requireDeviceID(s.handleGetServer))
 	mux.HandleFunc("/api/v2/get/maintenance", requireDeviceID(s.handleGetMaintenance))
 	mux.HandleFunc("/api/v2/post/cl1", requireDeviceID(s.handlePostCl1))
+	if deps.Statistics != nil {
+		deps.Statistics.Register(mux)
+	}
 	// v1 管理接口（运维用，非客户端契约）。
 	mux.HandleFunc("/api/v1/admin/announcement", s.adminAuth(s.handleAdminAnnouncement))
 	mux.HandleFunc("/api/v1/admin/update-policy", s.adminAuth(s.handleAdminUpdatePolicy))

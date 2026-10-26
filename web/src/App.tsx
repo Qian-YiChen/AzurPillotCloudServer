@@ -7,8 +7,9 @@ import { UpdatePolicyView } from './views/UpdatePolicyView'
 import { MaintenanceView } from './views/MaintenanceView'
 import { PublishStatusView } from './views/PublishStatusView'
 import { Logo } from './ui'
+import { RecognitionOverview, TemplateCandidates, TemplateLibrary } from './views/StatisticsView'
 
-type Section = 'overview' | 'announcement' | 'update-policy' | 'maintenance' | 'publish'
+type Section = 'overview' | 'announcement' | 'update-policy' | 'maintenance' | 'publish' | 'recognition' | 'candidates' | 'templates'
 
 const SECTIONS: Array<{ key: Section; label: string }> = [
   { key: 'overview', label: '概览' },
@@ -16,6 +17,9 @@ const SECTIONS: Array<{ key: Section; label: string }> = [
   { key: 'update-policy', label: '更新策略' },
   { key: 'maintenance', label: '维护计划' },
   { key: 'publish', label: '发布状态' },
+  { key: 'recognition', label: '识别概览' },
+  { key: 'candidates', label: '待分类模板' },
+  { key: 'templates', label: '模板库' },
 ]
 
 const SECTION_TITLES: Record<Section, string> = {
@@ -24,6 +28,9 @@ const SECTION_TITLES: Record<Section, string> = {
   'update-policy': '更新策略',
   maintenance: '维护计划',
   publish: '发布状态',
+  recognition: '识别概览',
+  candidates: '待分类模板',
+  templates: '模板库',
 }
 
 export function App() {
@@ -92,6 +99,9 @@ export function App() {
           {section === 'update-policy' && <UpdatePolicyView />}
           {section === 'maintenance' && <MaintenanceView />}
           {section === 'publish' && <PublishStatusView />}
+          {section === 'recognition' && <RecognitionOverview />}
+          {section === 'candidates' && <TemplateCandidates />}
+          {section === 'templates' && <TemplateLibrary />}
         </main>
       </div>
     </div>

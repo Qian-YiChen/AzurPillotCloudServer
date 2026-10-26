@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,7 +176,11 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 // timeoutMiddleware 为每个请求设置处理超时。
 func timeoutMiddleware(d time.Duration, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), d)
+		timeout := d
+		if strings.HasPrefix(r.URL.Path, "/api/v1/admin/statistics/preview/") {
+			timeout = 50 * time.Second
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

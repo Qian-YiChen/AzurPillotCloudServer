@@ -37,7 +37,7 @@ export function setAuthErrorHandler(handler: () => void): void {
   authErrorHandler = handler
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {}
   const token = getToken()
   if (token) {

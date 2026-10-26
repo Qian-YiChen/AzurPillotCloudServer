@@ -5,6 +5,7 @@
 - **GET /api/v2/get/server** —— 单服状态（实时查询游戏网关，带缓存）
 - **GET /api/v2/get/maintenance** —— 区服维护安排
 - **POST /api/v2/post/cl1** —— CL1 月度快照（去重、冲突检测、指标计算）
+- **科研与通用掉落统计** —— 三节点截图流水线的结果接收、版本订正、汇总查询和模板管理，见[部署与接口文档](docs/statistics-pipeline.md)。A/B 位于项目目录的独立仓库 `AzurPilotUploadServer`、`AzurPilotStatsWorker`。
 - 公告与更新策略静态文件的**生成与 Cloudflare Workers 发布**（凭据只保存在服务器端）
 - **/api/v1/admin/*** —— 运维管理接口（Bearer Token，非客户端契约）
 
@@ -20,12 +21,15 @@ internal/statuscache/  区服状态缓存（TTL + single-flight + 后台保活�
 internal/store/        PostgreSQL 访问（内嵌迁移、CL1 事务、维护、公告、发布历史）
 internal/httpapi/      HTTP 层（v2 动态接口、统一错误信封、限流、管理接口）
 internal/publish/      静态文件渲染 + Cloudflare Direct Upload 发布器（按 Worker 串行）
+internal/statistics/   识别结果、科研/掉落汇总、模板候选与 B 节点控制协议
 migrations -> internal/store/migrations/*.sql（go:embed）
 workers/               两个静态 Worker 的 wrangler 模板（初始创建与本地调试用）
 public/                本地静态发布目录（Worker Static Assets 内容）
 ```
 
 ## 快速开始
+
+原生 Go 启动前须显式加载环境变量；程序不自动读取 `.env`。Docker Compose 会读取项目配置文件。
 
 ```bash
 # 本地开发（需本机 PostgreSQL）

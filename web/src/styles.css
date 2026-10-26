@@ -288,6 +288,7 @@ table.detail tbody tr:hover {
 }
 
 input,
+select,
 textarea {
   background: var(--panel);
   border: 1px solid var(--border-strong);
@@ -299,6 +300,7 @@ textarea {
   outline: none;
 }
 input:focus,
+select:focus,
 textarea:focus {
   border-color: var(--text);
 }
@@ -477,7 +479,37 @@ button.ghost:hover:not(:disabled) {
 }
 
 /* ===== 窄屏 ===== */
+.page-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+.page-head > div { min-width: 0; }
+.page-head > label { display: flex; flex-direction: column; gap: 8px; color: var(--text-dim); font-size: 12px; }
+.form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.form-row input { min-width: 0; width: 100%; }
+.form-row label { justify-content: space-between; }
+.template-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 24px; align-items: start; }
+.template-layout > :only-child { grid-column: 1 / -1; }
+.candidate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
+.candidate-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; height: auto; color: var(--text); background: var(--panel); border: 1px solid var(--line); text-align: center; white-space: normal; }
+.candidate-card:hover, .candidate-card.selected { color: var(--text); background: var(--accent-soft); border-color: var(--accent); }
+.candidate-card img, .candidate-large { width: 80px; height: 80px; object-fit: contain; image-rendering: pixelated; }
+.candidate-card span { font-size: 12px; font-weight: 400; }
+.recognition-worker, .recognition-issue { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.recognition-issue { justify-content: space-between; align-items: start; }
+.recognition-issue > div { min-width: 0; flex: 1; }
+.recognition-issue ul { overflow-wrap: anywhere; padding-left: 24px; }
+.recognition-hash { overflow-wrap: anywhere; font-family: Consolas, monospace; font-size: 12px; }
+.recognition-command { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.recognition-command summary { cursor: pointer; font-weight: 500; }
+.recognition-command pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow-y: auto; font-size: 12px; }
+.template-thumb { width: 48px; height: 48px; image-rendering: pixelated; }
+.source-preview { display: block; width: 100%; margin-top: 16px; }
+.table-wrap { overflow-x: auto; }
+.table-wrap table { min-width: 640px; }
+@media (max-width: 960px) { .template-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 720px) {
+  .form-row { grid-template-columns: minmax(0, 1fr); }
+  .sidebar nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .sidebar .nav-group { grid-column: 1 / -1; }
   .layout {
     flex-direction: column;
   }
