@@ -26,7 +26,7 @@
 
 1. C 按现有 Docker Compose 启动 PostgreSQL 和服务，配置 `ADMIN_TOKEN` 与独立的 `STATISTICS_TOKEN`。新 SQL 迁移随服务启动执行；升级前备份数据库。
 2. B 按其 README 配置 `STATISTICS_URL`、相同 `STATISTICS_TOKEN`、123 盘开放平台凭据和可用的 `ALAS_ROOT`/`ALAS_PYTHON`。启动单进程，再用已有 Cloudflare Tunnel 暴露 HTTP/WebSocket 8091 端口，应用层使用 `WORKER_TOKEN` 鉴权。
-3. A 配置相同 `WORKER_TOKEN`、B 的 `wss://.../internal/v1/batches` 和 123 盘凭据，启动两路上传进程。A 的完整组 HTTP 请求可达 500 MiB，应使用允许该大小的 HTTPS 入口。
+3. A 配置相同 `WORKER_TOKEN`、B 的 `wss://.../internal/v1/batches` 和 123 盘凭据，启动两路上传进程。经过 Cloudflare Tunnel 时，客户端使用 `POST /api/v1/uploads/init` 登记完整元数据，逐文件 `PUT /api/v1/uploads/{upload_id}/files/{index}`，最后 `POST /api/v1/uploads/{upload_id}/complete`。每个图片请求最多 10 MiB，整组仍可达 500 MiB；具体重试协议见 [A 的上传文档](https://github.com/wess09/AzurPilotUploadServer#上传协议)。兼容的整组 multipart 请求需要允许至少 502 MiB 的 HTTPS 入口，不能直接经过免费套餐的 100 MB 请求上限。
 4. C 若要按需查看原始帧，配置 `RECOGNIZER_URL=https://B域名`、`WORKER_TOKEN`。若 B 还经过 Cloudflare Access，必须让该服务请求通过相应 Access 策略。
 5. 打开 `/admin/` 的“识别概览”“待分类模板”“模板库”，确认 B 在线，先试识别再发布。
 
