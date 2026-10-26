@@ -101,7 +101,7 @@ func TestQueryTCPAgainstMockGateway(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	go func() {
 		for {
@@ -110,19 +110,21 @@ func TestQueryTCPAgainstMockGateway(t *testing.T) {
 				return
 			}
 			go func(c net.Conn) {
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				req := make([]byte, len(goldenRequest)/2)
 				if _, err := io.ReadFull(c, req); err != nil {
 					return
 				}
-				c.Write(golden)
+				_, _ = c.Write(golden)
 			}(conn)
 		}
 	}()
 
 	host, port, _ := net.SplitHostPort(ln.Addr().String())
 	var portNum int
-	fmt.Sscanf(port, "%d", &portNum)
+	if _, err := fmt.Sscanf(port, "%d", &portNum); err != nil {
+		t.Fatal(err)
+	}
 	servers, err := queryTCP(context.Background(), host, portNum, 5*time.Second)
 	if err != nil {
 		t.Fatalf("查询失败: %v", err)

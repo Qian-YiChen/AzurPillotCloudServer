@@ -88,7 +88,7 @@ func (c *Client) api(ctx context.Context, method, path string, contentType strin
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
@@ -96,14 +96,14 @@ func (c *Client) api(ctx context.Context, method, path string, contentType strin
 	}
 	var envelope cfResponse
 	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return nil, fmt.Errorf("Cloudflare 返回非 JSON（HTTP %d）: %s", resp.StatusCode, truncate(raw, 200))
+		return nil, fmt.Errorf("cloudflare 返回非 JSON（HTTP %d）: %s", resp.StatusCode, truncate(raw, 200))
 	}
 	if !envelope.Success || resp.StatusCode >= 400 {
 		msg := fmt.Sprintf("HTTP %d", resp.StatusCode)
 		if len(envelope.Errors) > 0 {
 			msg = fmt.Sprintf("HTTP %d: code %d %s", resp.StatusCode, envelope.Errors[0].Code, envelope.Errors[0].Message)
 		}
-		return nil, fmt.Errorf("Cloudflare API 调用失败: %s", msg)
+		return nil, fmt.Errorf("cloudflare API 调用失败: %s", msg)
 	}
 	return envelope.Result, nil
 }
@@ -225,7 +225,7 @@ func (c *Client) uploadRaw(ctx context.Context, jwt string, body io.Reader, cont
 	if err != nil {
 		return nil, fmt.Errorf("上传资产失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
 		return nil, err

@@ -42,7 +42,7 @@ func encodeVarint(value uint64) []byte {
 }
 
 func encodeVarintField(fieldNumber int, value uint64) []byte {
-	tag := encodeVarint(uint64(fieldNumber)<<3 | 0) // wire type 0
+	tag := encodeVarint(uint64(fieldNumber) << 3) // wire type 0
 	return append(tag, encodeVarint(value)...)
 }
 

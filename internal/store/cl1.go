@@ -57,7 +57,7 @@ func (s *Store) SubmitCl1(ctx context.Context, rec Cl1Record, bodyHash string, r
 	if err != nil {
 		return 0, nil, fmt.Errorf("开启事务失败: %w", err)
 	}
-	defer tx.Rollback(ctx) // 提交后调用为无害空操作。
+	defer func() { _ = tx.Rollback(ctx) }() // 提交后调用为无害空操作。
 
 	// 1. 查询 request_id 去重结果。
 	var storedHash string

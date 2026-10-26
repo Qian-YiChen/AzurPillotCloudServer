@@ -35,7 +35,7 @@ func writeAtomic(path string, content []byte) error {
 		_ = os.Remove(tmpName)
 	}()
 	if _, err := tmp.Write(content); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {

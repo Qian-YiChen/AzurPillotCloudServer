@@ -81,7 +81,7 @@ func queryTCP(ctx context.Context, host string, port int, timeout time.Duration)
 	if err != nil {
 		return nil, classify(err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	deadline := time.Now().Add(timeout)
 	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
@@ -155,7 +155,7 @@ func queryHTTP(ctx context.Context, rawURL string, timeout time.Duration) ([]Raw
 	if err != nil {
 		return nil, classify(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, classify(fmt.Errorf("http status %d", resp.StatusCode))
@@ -170,7 +170,7 @@ func queryHTTP(ctx context.Context, rawURL string, timeout time.Duration) ([]Raw
 	}
 	decoder := json.NewDecoder(resp.Body)
 	if err := decoder.Decode(&items); err != nil {
-		return nil, classify(fmt.Errorf("%w: JSON 解析失败: %v", ErrProtocol, err))
+		return nil, classify(fmt.Errorf("%w: JSON 解析失败: %w", ErrProtocol, err))
 	}
 
 	servers := make([]RawServer, 0, len(items))

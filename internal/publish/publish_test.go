@@ -52,7 +52,7 @@ func (m *mockCF) handler(t *testing.T) http.Handler {
 			if m.skipBuckets {
 				resp = `{"success":true,"result":{"jwt":"completion-jwt","buckets":[]}}`
 			}
-			w.Write([]byte(resp))
+			_, _ = w.Write([]byte(resp))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/workers/assets/upload"):
 			if err := m.parseUpload(r); err != nil {
 				t.Errorf("上传解析失败: %v", err)
@@ -60,7 +60,7 @@ func (m *mockCF) handler(t *testing.T) http.Handler {
 				return
 			}
 			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte(`{"jwt":"completion-jwt"}`))
+			_, _ = w.Write([]byte(`{"jwt":"completion-jwt"}`))
 		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/client/v4/accounts/acc/workers/scripts/"):
 			if err := r.ParseMultipartForm(10 << 20); err != nil {
 				t.Errorf("部署 multipart 解析失败: %v", err)
@@ -74,7 +74,7 @@ func (m *mockCF) handler(t *testing.T) http.Handler {
 				return
 			}
 			metaRaw, _ := io.ReadAll(metaFile)
-			metaFile.Close()
+			_ = metaFile.Close()
 			meta := string(metaRaw)
 			file, _, err := r.FormFile("main.js")
 			if err != nil {
@@ -82,12 +82,12 @@ func (m *mockCF) handler(t *testing.T) http.Handler {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 			main, _ := io.ReadAll(file)
 			m.mu.Lock()
 			m.deployMeta, m.deployMain = meta, string(main)
 			m.mu.Unlock()
-			w.Write([]byte(`{"success":true,"result":{}}`))
+			_, _ = w.Write([]byte(`{"success":true,"result":{}}`))
 		default:
 			t.Errorf("意外请求: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -108,7 +108,7 @@ func (m *mockCF) parseUpload(r *http.Request) error {
 			if err != nil {
 				return err
 			}
-			defer rc.Close()
+			defer func() { _ = rc.Close() }()
 			raw, err := io.ReadAll(rc)
 			if err != nil {
 				return err
@@ -172,10 +172,10 @@ func TestClientDeployFailsKeepPrevious(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"success":false,"errors":[{"code":1,"message":"deploy boom"}]}`))
+			_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":1,"message":"deploy boom"}]}`))
 			return
 		}
-		w.Write([]byte(`{"success":true,"result":{"jwt":"completion-jwt","buckets":[]}}`))
+		_, _ = w.Write([]byte(`{"success":true,"result":{"jwt":"completion-jwt","buckets":[]}}`))
 	}))
 	defer srv.Close()
 
@@ -228,7 +228,7 @@ func TestPublisherSerialAndReadBack(t *testing.T) {
 
 	// 公网读取确认端点：返回与待发布一致的内容。
 	public := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer public.Close()
 
@@ -263,7 +263,7 @@ func TestPublisherReadBackMismatch(t *testing.T) {
 	content := []byte(`{"schema_version":2,"announcement":null}` + "\n")
 
 	public := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"schema_version":1}`)) // 内容不一致
+		_, _ = w.Write([]byte(`{"schema_version":1}`)) // 内容不一致
 	}))
 	defer public.Close()
 

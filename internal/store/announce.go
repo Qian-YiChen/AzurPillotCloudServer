@@ -38,7 +38,7 @@ func (s *Store) SetAnnouncement(ctx context.Context, a Announcement) error {
 	if err != nil {
 		return fmt.Errorf("开启事务失败: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx,
 		`UPDATE announcements SET active = FALSE, updated_at = now() WHERE active`); err != nil {
