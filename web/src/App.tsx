@@ -1,22 +1,25 @@
 import { useEffect, useState } from 'react'
 import { clearToken, getToken, setAuthErrorHandler } from './api'
 import { Login } from './views/Login'
+import { OverviewView } from './views/OverviewView'
 import { AnnouncementView } from './views/AnnouncementView'
 import { UpdatePolicyView } from './views/UpdatePolicyView'
 import { MaintenanceView } from './views/MaintenanceView'
 import { PublishStatusView } from './views/PublishStatusView'
 import { Logo } from './ui'
 
-type Section = 'announcement' | 'update-policy' | 'maintenance' | 'publish'
+type Section = 'overview' | 'announcement' | 'update-policy' | 'maintenance' | 'publish'
 
-const SECTIONS: Array<{ key: Section; label: string; hint: string }> = [
-  { key: 'announcement', label: '公告管理', hint: '发布与撤回公告' },
-  { key: 'update-policy', label: '更新策略', hint: '强制更新开关' },
-  { key: 'maintenance', label: '维护计划', hint: '区服维护安排' },
-  { key: 'publish', label: '发布状态', hint: '静态文件发布结果' },
+const SECTIONS: Array<{ key: Section; label: string }> = [
+  { key: 'overview', label: '概览' },
+  { key: 'announcement', label: '公告管理' },
+  { key: 'update-policy', label: '更新策略' },
+  { key: 'maintenance', label: '维护计划' },
+  { key: 'publish', label: '发布状态' },
 ]
 
 const SECTION_TITLES: Record<Section, string> = {
+  overview: '概览',
   announcement: '公告管理',
   'update-policy': '更新策略',
   maintenance: '维护计划',
@@ -25,7 +28,7 @@ const SECTION_TITLES: Record<Section, string> = {
 
 export function App() {
   const [authed, setAuthed] = useState(() => getToken() !== '')
-  const [section, setSection] = useState<Section>('announcement')
+  const [section, setSection] = useState<Section>('overview')
   const [banner, setBanner] = useState<string | null>(null)
 
   // API 层收到 401 时回到登录页（凭据失效或被撤销）。
@@ -70,7 +73,6 @@ export function App() {
                 onClick={() => setSection(s.key)}
               >
                 <span>{s.label}</span>
-                <small>{s.hint}</small>
               </button>
             ))}
           </nav>
@@ -85,6 +87,7 @@ export function App() {
               </button>
             </p>
           )}
+          {section === 'overview' && <OverviewView onNavigate={(s) => setSection(s as Section)} />}
           {section === 'announcement' && <AnnouncementView />}
           {section === 'update-policy' && <UpdatePolicyView />}
           {section === 'maintenance' && <MaintenanceView />}

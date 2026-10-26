@@ -30,7 +30,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Segoe UI', 'Microsoft YaHei', Inter, system-ui, -apple-system, sans-serif;
+  font-family: Inter, 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.55;
 }
@@ -133,20 +133,16 @@ code {
 }
 /* 导航项是 button，需要压过全局 button 基础/hover 规则。 */
 .sidebar button.nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  display: block;
+  width: 100%;
   text-align: left;
   background: none;
   border: none;
   border-radius: 4px;
   color: var(--text);
-  padding: 8px 10px;
+  padding: 7px 10px;
   cursor: pointer;
-}
-.sidebar button.nav-item small {
-  color: var(--text-dim);
-  font-size: 11px;
+  font-weight: 400;
 }
 .sidebar button.nav-item:hover:not(:disabled) {
   background: var(--surface-hover);
@@ -175,8 +171,8 @@ code {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-  padding: 18px 20px;
-  margin-bottom: 16px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
 }
 .card-head {
   display: flex;
@@ -191,10 +187,41 @@ code {
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 .grid .card {
   margin-bottom: 0;
+}
+
+/* ===== 概览统计卡 ===== */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.stat {
+  margin-bottom: 0;
+}
+.stat-title {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  margin: 0 0 6px;
+}
+.stat-main {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+.stat-main .pill {
+  font-size: 13px;
+}
+.stat-main.dim {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+.stat-body .muted {
+  margin: 0;
 }
 
 /* ===== 表格 ===== */
@@ -206,7 +233,7 @@ table.detail {
 table.detail th,
 table.detail td {
   text-align: left;
-  padding: 7px 10px 7px 0;
+  padding: 6px 10px 6px 0;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
@@ -373,7 +400,7 @@ button.ghost:hover:not(:disabled) {
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(1200px 400px at 50% -120px, rgba(246, 130, 31, 0.12), transparent),
+    radial-gradient(900px 300px at 50% -80px, rgba(246, 130, 31, 0.07), transparent),
     var(--bg);
 }
 .login-card {

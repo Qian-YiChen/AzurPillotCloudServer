@@ -38,18 +38,23 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[]): {
   return { data, error, loading, reload: () => setTick((t) => t + 1) }
 }
 
-// Cloudflare 风格的橙色云朵标识。
-export function Logo({ size = 22 }: { size?: number }) {
+// 双色调云形标识：后层浅橙云 + 前层橙云，几何图形拼合保证小尺寸清晰。
+export function Logo({ size = 24 }: { size?: number }) {
+  const h = Math.round(size * 0.66)
   return (
-    <svg width={size} height={Math.round(size * 0.62)} viewBox="0 0 64 40" fill="none" aria-hidden="true">
-      <path
-        d="M44.6 33.5H16.9c-4.6 0-8.4-3.8-8.4-8.4 0-4.2 3.1-7.7 7.2-8.3.6-5.4 5.2-9.6 10.7-9.6 3.4 0 6.5 1.6 8.5 4.1 1.5-1 3.3-1.5 5.2-1.5 5 0 9.1 3.9 9.5 8.8 3.9.3 7 3.6 7 7.6 0 4-3.3 7.3-7.3 7.3h-4.7z"
-        fill="#F6821F"
-      />
-      <path
-        d="M52.3 20.6c-.4 0-.9 0-1.3.1-1.9-5.6-7.2-9.7-13.5-9.7-2.4 0-4.7.6-6.7 1.6 2.9.9 5.4 2.7 7.1 5.2 1.3-.7 2.8-1.1 4.4-1.1 4.5 0 8.3 3.2 9.2 7.5h.8c3 0 5.5 2.5 5.5 5.5 0 2.6-1.8 4.8-4.2 5.4h4.9c4 0 7.3-3.3 7.3-7.3 0-4-3.1-7.2-7-7.6-.5-4.9-4.6-8.8-9.5-8.8-1.9 0-3.7.5-5.2 1.5"
-        fill="#FBAD41"
-      />
+    <svg width={size} height={h} viewBox="0 0 48 32" fill="none" aria-hidden="true">
+      {/* 后层云（浅橙） */}
+      <g fill="#FBAD41">
+        <circle cx="21" cy="10" r="6.5" />
+        <rect x="12" y="8" width="20" height="9" rx="4.5" />
+      </g>
+      {/* 前层云（橙），底部带一级台阶 */}
+      <g fill="#F6821F">
+        <circle cx="13" cy="20" r="7" />
+        <circle cx="25" cy="16" r="9.5" />
+        <rect x="7" y="19" width="30" height="8" rx="4" />
+        <rect x="7" y="24" width="37" height="4" rx="2" />
+      </g>
     </svg>
   )
 }
