@@ -46,6 +46,8 @@ type statusWriter struct {
 	wroteHeader bool
 }
 
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 func (w *statusWriter) WriteHeader(code int) {
 	if !w.wroteHeader {
 		w.status = code
@@ -177,6 +179,10 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 func timeoutMiddleware(d time.Duration, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		timeout := d
+		if r.URL.Path == "/api/telemetry/stats/stream" && r.Method == http.MethodGet {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/admin/statistics/preview/") {
 			timeout = 50 * time.Second
 		}

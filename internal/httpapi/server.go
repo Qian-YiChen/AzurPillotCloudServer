@@ -96,6 +96,12 @@ func New(deps Deps) *Server {
 	mux.HandleFunc("/api/v2/get/server", requireDeviceID(s.handleGetServer))
 	mux.HandleFunc("/api/v2/get/maintenance", requireDeviceID(s.handleGetMaintenance))
 	mux.HandleFunc("/api/v2/post/cl1", requireDeviceID(s.handlePostCl1))
+	mux.HandleFunc("/api/telemetry", legacyPublic(s.handleLegacyTelemetry))
+	mux.HandleFunc("/api/get/announcement", legacyPublic(s.handleLegacyAnnouncement))
+	mux.HandleFunc("/api/force_update", legacyPublic(s.handleLegacyForceUpdate))
+	mux.HandleFunc("/api/maintenance", legacyPublic(s.handleLegacyMaintenance))
+	mux.HandleFunc("/api/upload", legacyPublic(s.handleLegacyUploadRedirect))
+	mux.HandleFunc("/api/upload/{$}", legacyPublic(s.handleLegacyUploadRedirect))
 	if deps.Statistics != nil {
 		deps.Statistics.Register(mux)
 	}

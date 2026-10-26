@@ -6,6 +6,7 @@
 - **GET /api/v2/get/maintenance** —— 区服维护安排
 - **POST /api/v2/post/cl1** —— CL1 月度快照（去重、冲突检测、指标计算）
 - **科研与通用掉落统计** —— 三节点截图流水线的结果接收、版本订正、汇总查询和模板管理，见[部署与接口文档](docs/statistics-pipeline.md)。A/B 位于项目目录的独立仓库 `AzurPilotUploadServer`、`AzurPilotStatsWorker`。
+- **AP 历史接口** —— multipart 图片、JSON 掉落、月度遥测及旧统计查询，见[兼容矩阵与统计口径](docs/legacy-api.md)。
 - 公告与更新策略静态文件的**生成与 Cloudflare Workers 发布**（凭据只保存在服务器端）
 - **/api/v1/admin/*** —— 运维管理接口（Bearer Token，非客户端契约）
 

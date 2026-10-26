@@ -44,6 +44,7 @@ type Config struct {
 	WorkerToken          string
 	StatisticsFileBytes  int64
 	StatisticsGroupBytes int64
+	LegacyUploadURL      string
 	// LogLevel 为 slog 级别：debug、info、warn、error。
 	LogLevel string
 
@@ -83,6 +84,7 @@ func Load() (Config, error) {
 		DatabaseURL:          env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/apcloud?sslmode=disable"),
 		AdminToken:           env("ADMIN_TOKEN", ""),
 		StatisticsToken:      env("STATISTICS_TOKEN", ""),
+		LegacyUploadURL:      env("LEGACY_UPLOAD_PUBLIC_URL", ""),
 		RecognizerURL:        env("RECOGNIZER_URL", ""),
 		WorkerToken:          env("WORKER_TOKEN", ""),
 		StatisticsFileBytes:  int64(envInt("MAX_FILE_BYTES", 10<<20)),

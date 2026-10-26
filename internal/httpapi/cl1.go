@@ -210,7 +210,12 @@ func (s *Server) handlePostCl1(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5. 计算指标并组装成功响应（duplicate=false）。
+	sum := sha256.Sum256(body)
+	s.saveCl1(w, r, req, collectedAt, hex.EncodeToString(sum[:]), false)
+}
+
+func (s *Server) saveCl1(w http.ResponseWriter, r *http.Request, req cl1Request, collectedAt time.Time, bodyHash string, legacy bool) {
+	// Both protocols share server-side metrics, durable dedup and snapshots.
 	battleRounds, sortieCost, netGain, probability, averageStamina :=
 		computeMetrics(req.BattleCount, req.AkashiEncounters, req.AkashiAP)
 	resp := cl1Response{
@@ -242,8 +247,8 @@ func (s *Server) handlePostCl1(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 6. 事务写入：快照覆盖 + 去重登记。
-	sum := sha256.Sum256(body)
 	outcome, payload, err := s.store.SubmitCl1(r.Context(), store.Cl1Record{
+		Legacy:            legacy,
 		RequestID:         req.RequestID,
 		DeviceID:          req.DeviceID,
 		InstanceID:        req.InstanceID,
@@ -257,7 +262,7 @@ func (s *Server) handlePostCl1(w http.ResponseWriter, r *http.Request) {
 		AkashiProbability: probability,
 		AverageStamina:    averageStamina,
 		NetStaminaGain:    netGain,
-	}, hex.EncodeToString(sum[:]), responseJSON)
+	}, bodyHash, responseJSON)
 	if err != nil {
 		s.logger.Error("CL1 写入失败", "err", err)
 		writeError(w, r, errInternal())
@@ -267,7 +272,11 @@ func (s *Server) handlePostCl1(w http.ResponseWriter, r *http.Request) {
 	switch outcome {
 	case store.Cl1Accepted:
 		// 快照与去重记录已原子提交，返回刚组装的业务结果。
-		writeJSON(w, r, http.StatusOK, json.RawMessage(responseJSON))
+		if r.URL.Path == "/api/telemetry" {
+			s.writeLegacyCl1(w, r, resp)
+		} else {
+			writeJSON(w, r, http.StatusOK, json.RawMessage(responseJSON))
+		}
 	case store.Cl1Duplicate:
 		// 原业务结果原样返回，仅把 duplicate 标记为 true。
 		var replay cl1Response
@@ -277,7 +286,11 @@ func (s *Server) handlePostCl1(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		replay.Duplicate = true
-		writeJSON(w, r, http.StatusOK, replay)
+		if r.URL.Path == "/api/telemetry" {
+			s.writeLegacyCl1(w, r, replay)
+		} else {
+			writeJSON(w, r, http.StatusOK, replay)
+		}
 	case store.Cl1RequestConflict:
 		writeError(w, r, errRequestConflict("同一 request_id 携带了不同的正文"))
 	case store.Cl1StaleSnapshot:

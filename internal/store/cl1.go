@@ -26,6 +26,7 @@ const (
 
 // Cl1Record 是一次 CL1 月度快照写入。
 type Cl1Record struct {
+	Legacy            bool
 	RequestID         string
 	DeviceID          string
 	InstanceID        string
@@ -94,11 +95,12 @@ func (s *Store) SubmitCl1(ctx context.Context, rec Cl1Record, bodyHash string, r
 			average_stamina    = EXCLUDED.average_stamina,
 			net_stamina_gain   = EXCLUDED.net_stamina_gain,
 			updated_at         = now()
-		WHERE cl1_snapshots.collected_at <= EXCLUDED.collected_at`,
+		WHERE cl1_snapshots.collected_at <= EXCLUDED.collected_at
+		AND (NOT $13::boolean OR (cl1_snapshots.battle_count<=EXCLUDED.battle_count AND cl1_snapshots.akashi_encounters<=EXCLUDED.akashi_encounters AND cl1_snapshots.akashi_ap<=EXCLUDED.akashi_ap))`,
 		rec.DeviceID, rec.InstanceID, rec.Month, rec.CollectedAt,
 		rec.BattleCount, rec.BattleRounds, rec.SortieCost,
 		rec.AkashiEncounters, rec.AkashiAP,
-		rec.AkashiProbability, rec.AverageStamina, rec.NetStaminaGain,
+		rec.AkashiProbability, rec.AverageStamina, rec.NetStaminaGain, rec.Legacy,
 	)
 	if err != nil {
 		return 0, nil, fmt.Errorf("写入快照失败: %w", err)

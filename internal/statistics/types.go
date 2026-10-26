@@ -14,14 +14,18 @@ var deviceRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var instanceRE = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 type Metadata struct {
-	UploadID    string  `json:"upload_id"`
-	DeviceID    string  `json:"device_id"`
-	InstanceID  string  `json:"instance_id"`
-	Project     string  `json:"project"`
-	Scene       string  `json:"scene"`
-	Server      string  `json:"server"`
-	CollectedAt string  `json:"collected_at"`
-	Sizes       []int64 `json:"file_sizes"`
+	UploadID       string  `json:"upload_id"`
+	DeviceID       string  `json:"device_id"`
+	InstanceID     string  `json:"instance_id"`
+	Project        string  `json:"project"`
+	Scene          string  `json:"scene"`
+	Server         string  `json:"server"`
+	CollectedAt    string  `json:"collected_at"`
+	Sizes          []int64 `json:"file_sizes"`
+	CombatCount    int64   `json:"combat_count,omitempty"`
+	LegacyFilename string  `json:"legacy_filename,omitempty"`
+	LegacyDeviceID string  `json:"legacy_device_id,omitempty"`
+	Submitter      string  `json:"submitter,omitempty"`
 }
 type SourceFile struct {
 	Index  int    `json:"index"`
@@ -40,6 +44,10 @@ type Item struct {
 	Tag    string `json:"tag"`
 }
 type Event struct {
+	Zone        string `json:"zone,omitempty"`
+	ZoneType    string `json:"zone_type,omitempty"`
+	ZoneID      int    `json:"zone_id,omitempty"`
+	HazardLevel int    `json:"hazard_level,omitempty"`
 	Type        string `json:"event_type"`
 	Series      int    `json:"series"`
 	Project     string `json:"project"`
@@ -93,6 +101,9 @@ func (r Result) validateLimits(fileBytes, groupBytes int64) error {
 		return fmt.Errorf("invalid result identity/version")
 	}
 	m := r.Source.Metadata
+	if m.CombatCount < 0 || m.CombatCount > 1e9 || len(m.LegacyFilename) > 256 || len(m.LegacyDeviceID) > 64 || len(m.Submitter) > 128 {
+		return fmt.Errorf("invalid legacy source metadata")
+	}
 	if !deviceRE.MatchString(m.DeviceID) || !instanceRE.MatchString(m.InstanceID) || (m.Project != "research" && m.Project != "drop") || len(m.Scene) > 128 {
 		return fmt.Errorf("invalid source metadata")
 	}
@@ -133,6 +144,9 @@ func (r Result) validateLimits(fileBytes, groupBytes int64) error {
 		return fmt.Errorf("complete results require events and no unresolved diagnostics")
 	}
 	for _, e := range r.Events {
+		if e.ZoneID < 0 || e.ZoneID > 10000 || e.HazardLevel < 0 || e.HazardLevel > 6 || len(e.Zone) > 128 || len(e.ZoneType) > 32 {
+			return fmt.Errorf("invalid zone metadata")
+		}
 		if e.Duration < 0 || e.Duration > 604800 || e.Series < 0 || e.Series > 100 || e.FocusSeries < 0 || e.FocusSeries > 100 || len(e.Items) > 200 {
 			return fmt.Errorf("invalid event")
 		}
@@ -153,7 +167,7 @@ func (r Result) validateLimits(fileBytes, groupBytes int64) error {
 				return fmt.Errorf("invalid/duplicate item")
 			}
 			switch item.Tag {
-			case "", "bonus", "event", "catchup":
+			case "", "bonus", "event", "catchup", "meow", "log", "scan":
 			default:
 				return fmt.Errorf("invalid reward tag")
 			}

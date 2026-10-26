@@ -86,6 +86,15 @@ func (s *Service) auth(token string, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 func (s *Service) Register(m *http.ServeMux) {
+	for _, path := range []string{"stats", "history", "global_history"} {
+		m.HandleFunc("/api/telemetry/"+path, legacyPublic(s.legacyTelemetryQuery))
+	}
+	m.HandleFunc("/api/telemetry/stats/stream", legacyPublic(s.legacyTelemetryStream))
+	m.HandleFunc("/api/azurstat", legacyPublic(s.legacySubmit))
+	for _, path := range []string{"stats", "items", "history", "filters"} {
+		m.HandleFunc("/api/azurstat/"+path, legacyPublic(s.legacyQuery))
+	}
+	m.HandleFunc("/api/data/opsi_items", legacyPublic(s.legacyOpsiItems))
 	m.HandleFunc("GET /api/v1/admin/statistics/preview/{sha256}/{index}", s.auth(s.Admin, s.preview))
 	m.HandleFunc("POST /internal/v1/statistics/results", s.auth(s.Token, s.ingest))
 	m.HandleFunc("GET /internal/v1/statistics/results/{sha256}", s.auth(s.Token, s.receipt))
