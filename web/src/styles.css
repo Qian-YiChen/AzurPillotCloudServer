@@ -1,25 +1,31 @@
-/* AzurPilot 管理后台 —— Cloudflare Dashboard 风格：浅色、白卡片、
-   橙色品牌标识、蓝色主操作、细分隔线、紧凑专业布局。 */
+/* AzurPilot 管理后台 —— Cloudflare Dashboard（Kumo 设计体系）风格。
+   Token 取自 dash.cloudflare.com 线上 CSS（2026-10 提取），
+   详见项目根 DESIGN.md。 */
 
 :root {
-  --bg: #f8fafc;            /* 页面底色 canvas */
-  --panel: #ffffff;          /* 卡片 / 顶栏 / 侧栏 surface */
-  --border: #e2e5e9;         /* hairline */
-  --border-strong: #c4cbd4;  /* 输入框描边 hairline-strong */
-  --text: #1d1d1d;           /* 主文本 ink */
-  --text-dim: #66707b;       /* 次级文本 ink-muted */
-  --accent: #0051c3;         /* 操作蓝：主按钮 / 链接 / 激活态 */
-  --accent-hover: #003d96;
-  --surface-hover: #f1f4f7;
-  --surface-active: #e8f1fb; /* 导航选中底色 */
-  --brand: #f6821f;          /* 品牌橙：仅用于 Logo 标识 */
-  --ok: #0a7d42;
-  --ok-bg: #e9f7ee;
-  --warn: #9a6700;
-  --warn-bg: #fdf3dc;
-  --err: #b33f31;
-  --err-bg: #fde8e7;
-  --radius: 6px;
+  --bg: #fbfbfb;             /* kumo-canvas: neutral-25 */
+  --panel: #ffffff;          /* kumo-base: surface */
+  --border: #f2f2f2;         /* kumo-hairline: neutral-150 */
+  --line: rgba(0, 0, 0, 0.1);  /* kumo-line：更实的分隔线 */
+  --border-strong: #d4d4d4;  /* neutral-300，输入框描边 */
+  --text: #18181b;           /* neutral-900 */
+  --text-dim: #737373;       /* neutral-500 */
+  --text-subtle: #a3a3a3;    /* neutral-400，占位符 */
+  --accent: #056dff;         /* --color-primary */
+  --accent-hover: #1447e6;   /* blue-700 */
+  --accent-soft: #e8f1fb;    /* 激活导航底色（信息蓝浅调） */
+  --link: #193cb8;           /* blue-800，正文链接 */
+  --brand: #f6821f;          /* 品牌橙：仅 Logo 与品牌面板 */
+  --brand-light: #fbad41;
+  --ok: #006045;             /* emerald-800 文本 */
+  --ok-bg: #d9f2e5;          /* emerald 浅调 */
+  --warn: #894b00;           /* yellow-800 文本 */
+  --warn-bg: #fef9c2;        /* yellow-100 */
+  --err: #c10007;            /* red-700 文本 */
+  --err-bg: #fee2e1;         /* red 浅调 */
+  --radius: 8px;             /* radius-lg：卡片/输入/按钮 */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-float: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
 }
 
 * {
@@ -32,11 +38,12 @@ body {
   color: var(--text);
   font-family: Inter, 'Microsoft YaHei', 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 h1 {
-  font-size: 18px;
+  font-size: 24px;
+  font-weight: 600;
   margin: 0;
 }
 h2 {
@@ -46,13 +53,15 @@ h2 {
 }
 
 a {
-  color: var(--accent);
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 code {
-  font-family: Consolas, monospace;
+  font-family: Consolas, ui-monospace, Menlo, monospace;
   font-size: 12px;
-  background: #f1f4f7;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
@@ -77,7 +86,7 @@ code {
 .topbar {
   height: 60px;
   background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -93,12 +102,13 @@ code {
 }
 .brand strong {
   font-size: 16px;
+  font-weight: 600;
   letter-spacing: 0.2px;
 }
 .brand .crumb {
   color: var(--text-dim);
   font-size: 13px;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--line);
   padding-left: 10px;
   margin-left: 2px;
 }
@@ -112,7 +122,7 @@ code {
   width: 232px;
   flex-shrink: 0;
   background: var(--panel);
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--line);
   padding: 16px 10px;
   position: sticky;
   top: 60px;
@@ -126,11 +136,13 @@ code {
 .nav-group {
   color: var(--text-dim);
   font-size: 11.5px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   margin: 0 0 6px;
   padding: 0 12px;
 }
+
 /* 导航项是 button，需要压过全局 button 基础/hover 规则。 */
 .sidebar button.nav-item {
   display: block;
@@ -138,25 +150,21 @@ code {
   text-align: left;
   background: none;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--text);
   padding: 7px 10px;
   cursor: pointer;
   font-weight: 400;
 }
 .sidebar button.nav-item:hover:not(:disabled) {
-  background: var(--surface-hover);
+  background: #f5f5f5;
   color: var(--text);
 }
 .sidebar button.nav-item.active,
 .sidebar button.nav-item.active:hover:not(:disabled) {
-  background: var(--surface-active);
-  color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--link);
   font-weight: 600;
-}
-.sidebar button.nav-item.active small {
-  color: var(--text-dim);
-  font-weight: normal;
 }
 
 .content {
@@ -168,9 +176,8 @@ code {
 /* ===== 卡片 ===== */
 .card {
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
   padding: 14px 18px;
   margin-bottom: 14px;
 }
@@ -247,8 +254,12 @@ table.detail th {
   width: 96px;
   white-space: nowrap;
 }
+table.detail thead th {
+  width: auto;
+  font-weight: 500;
+}
 table.detail tbody tr:hover {
-  background: #fafbfc;
+  background: #fafafa;
 }
 .pre {
   white-space: pre-wrap;
@@ -280,21 +291,22 @@ input,
 textarea {
   background: var(--panel);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
+  border-radius: 8px;
   color: var(--text);
   padding: 8px 10px;
+  min-height: 40px;
   font: inherit;
   outline: none;
 }
 input:focus,
 textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(0, 81, 195, 0.15);
+  border-color: var(--text);
 }
 textarea {
   resize: vertical;
 }
 input[type='checkbox'] {
+  min-height: 0;
   width: 16px;
   height: 16px;
   accent-color: var(--accent);
@@ -306,11 +318,13 @@ input[type='datetime-local'] {
 /* ===== 按钮 ===== */
 button {
   font: inherit;
+  font-weight: 500;
   background: var(--accent);
   color: #fff;
   border: 1px solid var(--accent);
-  border-radius: 4px;
-  padding: 8px 16px;
+  border-radius: 8px;
+  padding: 0 16px;
+  height: 36px;
   cursor: pointer;
 }
 button:hover:not(:disabled) {
@@ -325,6 +339,7 @@ button.danger {
   background: var(--panel);
   border: 1px solid var(--err);
   color: var(--err);
+  font-weight: 400;
 }
 button.danger:hover:not(:disabled) {
   background: var(--err-bg);
@@ -332,12 +347,14 @@ button.danger:hover:not(:disabled) {
 button.ghost {
   background: var(--panel);
   border: 1px solid var(--border-strong);
-  color: #3d4753;
-  padding: 5px 12px;
+  color: var(--text);
+  padding: 0 12px;
+  height: 32px;
   font-size: 12.5px;
+  font-weight: 400;
 }
 button.ghost:hover:not(:disabled) {
-  background: #f1f4f7;
+  background: #f5f5f5;
 }
 
 .row {
@@ -345,7 +362,7 @@ button.ghost:hover:not(:disabled) {
   gap: 10px;
 }
 
-/* ===== 状态与提示（Cloudflare 徽章风格：软底色深字） ===== */
+/* ===== 状态徽章（软色底深字） ===== */
 .pills {
   display: flex;
   gap: 8px;
@@ -393,31 +410,70 @@ button.ghost:hover:not(:disabled) {
   gap: 12px;
 }
 
-/* ===== 登录页 ===== */
+/* ===== 登录页：左右分屏（左白表单 + 右品牌橙面板） ===== */
 .login-wrap {
   min-height: 100vh;
   display: flex;
+}
+.login-pane {
+  flex: 1 1 50%;
+  display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(900px 300px at 50% -80px, rgba(246, 130, 31, 0.07), transparent),
-    var(--bg);
+  background: var(--panel);
+  padding: 40px 24px;
+  position: relative;
+}
+.login-corner {
+  position: absolute;
+  top: 24px;
+  left: 32px;
 }
 .login-card {
-  width: 380px;
+  width: 360px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 28px;
-  box-shadow: 0 4px 16px rgba(16, 24, 40, 0.08);
+  gap: 14px;
 }
-.login-brand {
+.login-side {
+  flex: 1 1 50%;
+  background:
+    radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.14) 2px, transparent 2.5px),
+    radial-gradient(circle at 30% 70%, rgba(255, 255, 255, 0.1) 2px, transparent 2.5px),
+    linear-gradient(135deg, #f6821f 0%, #ec7014 100%);
+  background-size: 26px 26px, 34px 34px, auto;
+  color: #fff;
+  display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 4px;
+  justify-content: center;
+  padding: 48px;
 }
-.login-brand h1 {
-  text-align: center;
+.login-side .eyebrow {
+  font-family: Consolas, ui-monospace, Menlo, monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
+  opacity: 0.9;
+  margin: 0 0 14px;
+}
+.login-side h2 {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0 0 16px;
+  max-width: 420px;
+}
+.login-side p {
+  margin: 0 0 22px;
+  font-size: 14px;
+  opacity: 0.92;
+}
+.login-side .brand-tag {
+  position: absolute;
+  top: 24px;
+  left: 32px;
+}
+.login-side {
+  position: relative;
 }
 
 /* ===== 窄屏 ===== */
@@ -434,6 +490,9 @@ button.ghost:hover:not(:disabled) {
     padding: 16px;
   }
   .brand .crumb {
+    display: none;
+  }
+  .login-side {
     display: none;
   }
 }

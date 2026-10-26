@@ -4,30 +4,31 @@ name: Cloudflare-dashboard-design-analysis
 description: "A light, information-dense operations dashboard system built on a cool gray canvas (#f8fafc), pure white surfaces, and hairline borders (#e2e5e9). The signature Cloudflare orange (#f6821f) lives ONLY in the brand mark; all interactive color is a deep action blue (#0051c3) with soft blue focus rings. Typography is a single Inter-voice system at 400–600 with no display theatrics. Structure comes from a white 60px top bar with breadcrumbs, a white 232px left nav, and flat white cards with 1px borders — hierarchy by density and spacing, never by shadow. Status colors are muted semantic tints (soft green/amber/red backgrounds with dark readable text)."
 
 colors:
-  primary: "#0051c3"
+  primary: "#056dff"
   on-primary: "#ffffff"
-  primary-hover: "#003d96"
-  primary-active: "#00348b"
-  focus-ring: "rgba(0, 81, 195, 0.15)"
+  primary-hover: "#1447e6"
+  link: "#193cb8"
   brand-orange: "#f6821f"
   brand-orange-light: "#fbad41"
-  ink: "#1d1d1d"
-  ink-muted: "#66707b"
-  ink-subtle: "#8c9296"
-  canvas: "#f8fafc"
+  ink: "#18181b"
+  ink-muted: "#737373"
+  ink-subtle: "#a3a3a3"
+  canvas: "#fbfbfb"
   surface: "#ffffff"
-  surface-hover: "#f1f4f7"
+  surface-hover: "#f5f5f5"
   surface-active: "#e8f1fb"
-  hairline: "#e2e5e9"
-  hairline-strong: "#c4cbd4"
-  code-bg: "#f1f4f7"
-  semantic-success: "#0a7d42"
-  semantic-success-bg: "#e9f7ee"
-  semantic-warning: "#9a6700"
-  semantic-warning-bg: "#fdf3dc"
-  semantic-danger: "#b33f31"
-  semantic-danger-bg: "#fde8e7"
+  hairline: "#f2f2f2"
+  line: "rgba(0, 0, 0, 0.1)"
+  hairline-strong: "#d4d4d4"
+  code-bg: "#fbfbfb"
+  semantic-success: "#006045"
+  semantic-success-bg: "#d9f2e5"
+  semantic-warning: "#894b00"
+  semantic-warning-bg: "#fef9c2"
+  semantic-danger: "#c10007"
+  semantic-danger-bg: "#fee2e1"
   banner-warning-border: "#ecd9a0"
+
 
 typography:
   app-title:
@@ -128,16 +129,17 @@ Structure: a **white 60px sticky top bar** (logo + breadcrumb trail `管理后�
 ### Brand & Accent
 - **Brand Orange** ({colors.brand-orange}): The Cloudflare cloud mark. Nowhere else.
 - **Brand Orange Light** ({colors.brand-orange-light}): Two-tone highlight inside the mark.
-- **Action Blue** ({colors.primary}): Primary buttons, links, active nav text, focus borders.
-- **Action Blue Hover** ({colors.primary-hover}): Darker pressed/hovered state.
-- **Focus Ring** ({colors.focus-ring}): 3px soft blue halo around focused inputs/buttons.
+- **Action Blue** ({colors.primary}): #056dff — primary buttons, active nav, focus. Extracted from `--color-primary`.
+- **Action Blue Hover** ({colors.primary-hover}): #1447e6 (blue-700).
+- **Link Blue** ({colors.link}): #193cb8 (blue-800) — in-content links, active nav text.
+- **Focus**: focus darkens the control border to ink; no colored halo (Kumo uses near-black focus in light mode).
 
 ### Surface
-- **Canvas** ({colors.canvas}): Page background behind everything.
+- **Canvas** ({colors.canvas}): #fbfbfb page background behind everything (Kumo neutral-25).
 - **Surface** ({colors.surface}): Top bar, sidebar, cards, inputs, buttons-secondary.
 - **Surface Hover** ({colors.surface-hover}): Nav item hover, secondary button hover, code chips.
 - **Surface Active** ({colors.surface-active}): Active nav item background.
-- **Hairline** ({colors.hairline}): Card borders, dividers, table row rules.
+- **Hairline** ({colors.hairline}): #f2f2f2 — card borders, dividers, table row rules. Stronger separators use 10% black ({colors.line}).
 - **Hairline Strong** ({colors.hairline-strong}): Input borders (darken to blue on focus).
 - **Code BG** ({colors.code-bg}): Inline `<code>` chips.
 
@@ -236,7 +238,7 @@ Density over air. Rows are 28–34px tall; separation comes from hairlines, not 
 ### Top Bar & Navigation
 - Top bar: brand (orange mark + `{typography.app-title}` wordmark), hairline-separated breadcrumb `管理后台 / <页面>`, right-aligned secondary actions.
 - Nav: uppercase `{typography.section-label}` group label; items stacked, 8px 10px padding, `{rounded.sm}`-on-hover; active = `{colors.surface-active}` bg + blue `{typography.card-title}` text. No left border bars.
-- Login: centered 380px card (level-2 shadow) on canvas with a faint orange radial glow at top; brand mark above the title; single primary button full-width.
+- Login: **split screen** — left white pane holds the form (brand mark above 24px/600 title, 40px inputs, full-width primary button); right pane is full-bleed brand orange (#f6821f→#ec7014 gradient with white halftone dot texture), monospace eyebrow, bold white headline, positioned logo tag. Right pane hidden under 720px.
 
 ## Do's and Don'ts
 
@@ -246,13 +248,14 @@ Density over air. Rows are 28–34px tall; separation comes from hairlines, not 
 - Use hairline borders + whitespace for hierarchy; reach for shadow only on overlays.
 - Keep every status as muted-tint pill with dark readable text.
 - Use breadcrumbs in the top bar for wayfinding.
-- Keep controls compact: 4px radius, 32–36px height.
+- Controls: 8px radius, 36px buttons (weight 500), 40px inputs.
 - Show feedback inline near the action (pills, form-ok/form-err text).
 
 ### Don't
 
 - Don't introduce a dark theme or large low-contrast gray areas.
 - Don't use orange as a button/link/focus color.
+- Don't use the legacy navy #0051c3 — the real primary is vivid #056dff.
 - Don't pill-round buttons or inputs.
 - Don't add display-scale typography or letter-spacing games.
 - Don't put icons where a text label fits; no decorative illustration.
