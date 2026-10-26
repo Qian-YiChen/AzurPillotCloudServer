@@ -15,12 +15,17 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: [web]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: adminui-dist
+          path: internal/adminui/dist
       - uses: golangci/golangci-lint-action@v8
         with:
           version: latest
@@ -50,6 +55,7 @@ jobs:
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    needs: [web]
     strategy:
       fail-fast: false
       matrix:
@@ -57,7 +63,7 @@ jobs:
     services:
       # 集成测试用的 PostgreSQL（仅 ubuntu 提供 service 容器）。
       postgres:
-        image: postgres:17-alpine
+        image: ${{ matrix.os == 'ubuntu-latest' && 'postgres:17-alpine' || '' }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -78,6 +84,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: adminui-dist
+          path: internal/adminui/dist
       - name: go vet
         run: go vet ./...
       - name: go test（含竞态检测与协程泄露检查）
@@ -127,10 +137,20 @@ jobs:
     name: Docker 镜像
     runs-on: ubuntu-latest
     needs: [lint, test, web]
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=sha-${{ github.sha }}
+            type=raw,value=main,enable=${{ github.event_name == 'push' }}
       - name: 登录 GHCR
         if: github.event_name == 'push'
         uses: docker/login-action@v3
@@ -144,8 +164,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name == 'push' }}
-          tags: |
-            ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
-            ${{ github.event_name == 'push' && format('ghcr.io/{0}:main', github.repository) || '' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
