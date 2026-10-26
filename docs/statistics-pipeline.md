@@ -114,3 +114,5 @@ B 自动提取未知图标，小图内容 SHA-256 为候选 ID；相同来源/�
 C：`TEST_DATABASE_URL=<专用PG> go test -race -count=1 ./...`、`go vet ./...`、`npm --prefix web run build`。A/B 各自 README 提供单测和启动命令。可选 B→C 联调在 B 仓库运行 `tests/test_c_integration.py`，需要全新专用 C 数据库、`STATISTICS_TEST_URL / STATISTICS_TEST_TOKEN / STATISTICS_TEST_ADMIN` 及 Alas 环境；使用真实 OCR 与真实 C/PostgreSQL，仅替换云盘下载。
 
 实际 123 盘与 Tunnel 需填写部署凭据后另行验收；本地测试不会自动调用真实云盘或公开服务端口。
+
+A 仓库还提供可选 `TestRealWorkerWebSocketContract`，通过专用 B 实例验证 30 份上传后的真实 WebSocket 派发、鉴权和持久化确认；云盘上传仍使用磁盘校验替身。
