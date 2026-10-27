@@ -99,6 +99,7 @@ func New(deps Deps) *Server {
 	mux.HandleFunc("/api/telemetry", legacyPublic(s.handleLegacyTelemetry))
 	mux.HandleFunc("/api/get/announcement", legacyPublic(s.handleLegacyAnnouncement))
 	mux.HandleFunc("/api/force_update", legacyPublic(s.handleLegacyForceUpdate))
+	mux.HandleFunc("/api/v1/servers/{id}", legacyPublic(s.handleLegacyServer))
 	mux.HandleFunc("/api/maintenance", legacyPublic(s.handleLegacyMaintenance))
 	mux.HandleFunc("/api/upload", legacyPublic(s.handleLegacyUploadRedirect))
 	mux.HandleFunc("/api/upload/{$}", legacyPublic(s.handleLegacyUploadRedirect))

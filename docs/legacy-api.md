@@ -1,9 +1,12 @@
 # AP 客户端接口兼容
 
-仅以 AP 客户端实际调用和碧蓝统计局源码为依据：当前 AP `d0ce990caf24b821e4250909ada78016f95d31d0`、历史图片上传客户端 `cdbc5aef3dbdb113ebc285ea40e8e462cda2977b`，以及 [AzurStats ResearchList](https://github.com/LmeSzinc/azur-stats-server/blob/3a743f091b0a98d42a8dc04c3d16be9552a9c7d6/AzurStats/image/research_list.py)。
+统一公开入口为 `https://api.azurpilot.com`；`https://stats.azurpilot.com` 保留兼容及管理后台入口。AP 的核心 URL 集中在客户端 `deploy/api_endpoints.py`。
+
+仅以 AP 客户端实际调用和碧蓝统计局源码为依据：当前 AP `3148d0878ec9028be85d12d7b158c49853f0b173`、历史图片上传客户端 `cdbc5aef3dbdb113ebc285ea40e8e462cda2977b`，以及 [AzurStats ResearchList](https://github.com/LmeSzinc/azur-stats-server/blob/3a743f091b0a98d42a8dc04c3d16be9552a9c7d6/AzurStats/image/research_list.py)。
 
 | 路径 | 来源及契约 |
 |---|---|
+| `GET /api/v1/servers/{region}_{server_id}` | AP `module/server_checker.py`：按最后一个下划线拆分复合 ID，支持 `cn_ios`、`cn_channel`；复用 v2 网关缓存与 `server.id/name/status`，兼容客户端无需新增请求头。 |
 | `POST /api/upload`、`/api/upload/` | AP 历史 `module/statistics/azurstats.py`：multipart `file/device_id/genre/combat_count`；HTTP 200。也支持上游 Alas `User-Agent: Alas (<id>)` 单文件上传，兼容 Lsky `status/data.md5` 和 Imgurl `code/imgid` 回执。 |
 | `GET /api/data/opsi_items` | AP 历史 `module/statistics/azurstats.py`：`device_id/genre/limit/offset`，返回 `data` 数组。保留 imgid、海域、侵蚀等级、战斗数及物品标签，仅查询认证 OCR 当前版本。 |
 | `POST /api/telemetry` | 当前 `module/statistics/cl1_data_submitter.py`：原月度累计字段，无需新增请求头。`net_stamina_gain` 表示原始明石行动力，派生值由服务端重算。 |
@@ -13,7 +16,9 @@
 
 ## 部署和上传
 
-C 设置 `LEGACY_UPLOAD_PUBLIC_URL=http://160.202.238.171:30207/api/upload`，图片请求以 **307** 转交 A；A 设置 `STATISTICS_PUBLIC_URL=https://stats.azurpilot.com`，其余兼容接口以 307 转交 C。客户端须跟随重定向并保留 POST 正文。浏览器 HTTPS 页面应使用正式 HTTPS 上传入口。
+C 设置 `LEGACY_UPLOAD_PUBLIC_URL=http://160.202.238.171:30207/api/upload`，图片请求以 **307** 转交 A；A 设置 `STATISTICS_PUBLIC_URL=https://api.azurpilot.com`，其余兼容接口以 307 转交 C。客户端须跟随重定向并保留 POST 正文。浏览器 HTTPS 页面应使用正式 HTTPS 上传入口。
+
+公告和更新策略 Worker 同时绑定新旧主机的 `/api/v2/get/notice/*`、`/api/v2/get/update/*`，C 发布回读使用 `api.azurpilot.com`。更新文档保留 `force_update` 字段；不恢复已取消的 `/api/updata` 总开关。
 
 历史图片接口仍受 A 的流式落盘、64 KiB 缓冲、暂存配额、哈希去重及两路云盘上传限制。旧客户端不提供文件大小，每次仅预留单文件上限，失败释放空间；123 盘确认上传后删除本地原图。
 

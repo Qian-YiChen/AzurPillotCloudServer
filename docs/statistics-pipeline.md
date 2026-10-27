@@ -14,6 +14,8 @@
 
 ## 配置与部署顺序
 
+对外 API 统一使用 `https://api.azurpilot.com`，管理后台继续使用 `https://stats.azurpilot.com/admin/`。A 的 `STATISTICS_PUBLIC_URL` 和 B 的 `STATISTICS_URL` 指向统一 API 域名。新旧域名共享 C 服务和数据库；B 的预览入口仍由 `RECOGNIZER_URL` 单独配置。
+
 三个服务均提供 GHCR 镜像，不需要在服务器上编译；各仓库复制 `.env.example` 为 `.env` 并配置后，执行 `docker compose pull` 和 `docker compose up -d`：
 
 | 节点 | 镜像 |

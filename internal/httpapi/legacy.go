@@ -12,11 +12,39 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"ap-cloud-server/internal/store"
 )
+
+// AP's server checker sends composite IDs, including cn_ios and cn_channel.
+// Reuse the gateway/cache and response fields of v2 without requiring a new
+// device header from historical clients.
+func (s *Server) handleLegacyServer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, r, errMethodNotAllowed("GET"))
+		return
+	}
+	id := r.PathValue("id")
+	split := strings.LastIndexByte(id, '_')
+	if split <= 0 {
+		writeError(w, r, errValidation("需要 region_server_id", "id"))
+		return
+	}
+	serverID, err := strconv.Atoi(id[split+1:])
+	if err != nil || serverID <= 0 {
+		writeError(w, r, errValidation("server_id 必须为正整数", "id"))
+		return
+	}
+	copy := r.Clone(r.Context())
+	query := copy.URL.Query()
+	query.Set("region", id[:split])
+	query.Set("server_id", strconv.Itoa(serverID))
+	copy.URL.RawQuery = query.Encode()
+	s.handleGetServer(w, copy)
+}
 
 // The old AP submitter omits request_id/collected_at and reports raw Akashi AP
 // under net_stamina_gain. Never trust its separately computed derived metrics.
