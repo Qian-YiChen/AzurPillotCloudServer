@@ -187,6 +187,8 @@ const candidateReviewCTE = `WITH candidate_review AS (
  FROM candidate_review
 ) `
 
+const missingTemplateSQL = `(CASE WHEN jsonb_typeof(r.payload->'candidate_ids')='array' THEN jsonb_array_length(r.payload->'candidate_ids') ELSE 0 END>0 OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(r.payload->'diagnostics')='array' THEN r.payload->'diagnostics' ELSE '[]'::jsonb END) d WHERE d='missing_template' OR d LIKE 'missing_template:%'))`
+
 func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	if strings.HasSuffix(path, "overview") {
@@ -206,6 +208,11 @@ func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 			internal(w, e)
 			return
 		}
+		var templateReports, parserReports, templateImages, parserImages int64
+		if e := s.Pool.QueryRow(r.Context(), `SELECT count(*) FILTER(WHERE `+missingTemplateSQL+`), count(*) FILTER(WHERE NOT `+missingTemplateSQL+`), COALESCE(sum(jsonb_array_length(payload->'source'->'files')) FILTER(WHERE `+missingTemplateSQL+`),0)::bigint, COALESCE(sum(jsonb_array_length(payload->'source'->'files')) FILTER(WHERE NOT `+missingTemplateSQL+`),0)::bigint FROM stat_results r WHERE status='needs_review'`).Scan(&templateReports, &parserReports, &templateImages, &parserImages); e != nil {
+			internal(w, e)
+			return
+		}
 		rows, e := s.Pool.Query(r.Context(), `SELECT id,payload,updated_at,updated_at>now()-interval '90 seconds' AS online FROM stat_workers ORDER BY id`)
 		if e != nil {
 			internal(w, e)
@@ -216,11 +223,11 @@ func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 			internal(w, e)
 			return
 		}
-		output(w, 200, map[string]any{"counts": counts, "image_counts": images, "pending_candidates": pending, "workers": workers})
+		output(w, 200, map[string]any{"counts": counts, "image_counts": images, "pending_candidates": pending, "workers": workers, "issues": map[string]any{"missing_template": map[string]int64{"reports": templateReports, "images": templateImages}, "parser_failure": map[string]int64{"reports": parserReports, "images": parserImages}}})
 		return
 	}
 	queries := map[string]string{
-		"results":             `SELECT sha256,revision,status,payload,updated_at FROM stat_results WHERE ($1='' OR status=$1) ORDER BY updated_at DESC LIMIT 100`,
+		"results":             `SELECT sha256,revision,status,payload,updated_at FROM stat_results r WHERE ($1='' OR status=$1) AND ($2='' OR ($2='missing_template' AND ` + missingTemplateSQL + `) OR ($2='parser_failure' AND NOT ` + missingTemplateSQL + `)) ORDER BY updated_at DESC LIMIT 100`,
 		"template-candidates": candidateReviewCTE + `SELECT c.*, (SELECT count(*) FROM candidate_sources cs WHERE cs.candidate_id=c.id) AS occurrences, (SELECT jsonb_agg(metadata||jsonb_build_object('sample_sha256',sample_sha256,'occurrence',occurrence)) FROM (SELECT * FROM candidate_sources WHERE candidate_id=c.id LIMIT 20) x) AS sources FROM candidates c WHERE ($1='' OR status=$1) ORDER BY last_seen DESC LIMIT 100`,
 		"templates":           `SELECT id,item_id,name,category,rarity,series,scene,enabled,image FROM stat_templates WHERE ($1='' OR item_id=$1) ORDER BY item_id,id LIMIT 1000`,
 		"template-releases":   `SELECT id,sha256,created_at,id=(SELECT release_id FROM template_active WHERE id) AS active FROM template_releases WHERE ($1='') ORDER BY id DESC LIMIT 30`,
@@ -239,7 +246,16 @@ func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 	if name == "template-releases" {
 		status = ""
 	}
-	rows, e := s.Pool.Query(r.Context(), query, status)
+	args := []any{status}
+	if name == "results" {
+		reason := r.URL.Query().Get("reason")
+		if reason != "" && reason != "missing_template" && reason != "parser_failure" {
+			fail(w, 400, "VALIDATION_ERROR", "未知失败类型")
+			return
+		}
+		args = append(args, reason)
+	}
+	rows, e := s.Pool.Query(r.Context(), query, args...)
 	if e != nil {
 		internal(w, e)
 		return

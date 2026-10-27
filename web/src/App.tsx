@@ -100,7 +100,7 @@ export function App() {
           {section === 'update-policy' && <UpdatePolicyView />}
           {section === 'maintenance' && <MaintenanceView />}
           {section === 'publish' && <PublishStatusView />}
-          {section === 'recognition' && <RecognitionOverview />}
+          {section === 'recognition' && <RecognitionOverview onClassify={() => setSection('candidates')} />}
           {section === 'candidates' && <TemplateCandidates />}
           {section === 'templates' && <TemplateLibrary />}
         </main>

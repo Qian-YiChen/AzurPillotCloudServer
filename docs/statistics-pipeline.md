@@ -127,12 +127,14 @@ B 自动提取未知图标，小图内容 SHA-256 为候选 ID；相同来源/�
 | 分类或忽略 | `PATCH /api/v1/admin/template-candidates/{id}` |
 | 发布、回滚 | `POST /api/v1/admin/templates/publish`、`/templates/rollback` |
 | 草稿试识别、重跑 | `POST /api/v1/admin/templates/test`、`/statistics/reprocess`，正文 `{"ids":["样本或候选哈希"]}` |
-| 一键重新识别全部待复核上报 | `POST /api/v1/admin/statistics/reprocess-unresolved`，无需正文 |
+| 一键重试缺模板上报 | `POST /api/v1/admin/statistics/reprocess-unresolved`，无需正文；仅重试确实缺模板的来源 |
 | 原始帧流式预览 | `GET /api/v1/admin/statistics/preview/{sha256}/{index}?frame=0` |
 
 分类正文为 `{"status":"assigned","template":{"item_id":"Coins","name":"物资","category":"consumable","rarity":0,"series":0,"scene":"all","enabled":true}}`；忽略用 `status=ignored`。类别为 `ship_blueprint / equipment_blueprint / consumable / other`；模板场景 `all` 可跨科研和通用掉落使用，也可限制为 `research / drop`。
 
-分类保存会在同一事务中更新模板、冻结完整模板包和 SHA-256、切换活动版本，并登记所有待复核及使用过在线模板的样本重跑，返回 `release_id / queued_samples`。不需要再手动发布。已确认无效的截图不因补模板而重跑。待分类页的“一键重新识别”只重跑待复核上报，无需改动模板；待处理指令会合并，B 正在执行的任务允许在新版本下再次运行。
+分类保存会在同一事务中更新模板、冻结完整模板包和 SHA-256、切换活动版本，返回 `release_id / queued_samples`，无需再手动发布。新增或修改启用的识别模板时，只自动重跑当前缺模板的来源；模板修改、禁用或回滚时，只订正使用过受影响模板的结果。显示名称等元数据修改、重复发布相同识别内容不生成重跑任务。待分类页的“一键重试缺模板”也只重试缺模板来源，合并同版本待处理指令。
+
+项目、数量、奖励画面或其他纯解析失败只保留失败历史，不进入模板自动重试流程、不计入正式统计。后台默认展示“等待补充模板”，其他失败可在“解析失败历史”中查看；识别器修复后可通过单条 `/statistics/reprocess` 明确重试。内部状态 `needs_review` 保留用于协议兼容，界面不再表示需要人工复核。
 
 回滚复制旧内容生成新版本，保持版本号递增；当前模板编辑值不随回滚改动。B 通过 `POST /internal/v1/worker/sync` 每 30 秒上报心跳/指令进度并获取活动版本和指令，通过 `GET /internal/v1/template-releases/{id}` 下载并验包。重处理不等待 30 分钟上传调度；每个识别任务固定模板快照，试识别不写正式结果。
 

@@ -211,24 +211,66 @@ func releaseInTx(ctx context.Context, tx pgx.Tx, payload []byte) (int64, int64, 
 	sum := sha256.Sum256(payload)
 	var e error
 	var id int64
+	var previous []byte
+	e = tx.QueryRow(ctx, `SELECT payload FROM template_releases WHERE id=(SELECT release_id FROM template_active WHERE id)`).Scan(&previous)
+	if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+		return 0, 0, e
+	}
+	changed, retryMissing, e := changedRecognitionTemplates(previous, payload)
+	if e != nil {
+		return 0, 0, e
+	}
 	if e = tx.QueryRow(ctx, `INSERT INTO template_releases(sha256,payload) VALUES($1,$2) RETURNING id`, hex.EncodeToString(sum[:]), payload).Scan(&id); e != nil {
 		return 0, 0, e
 	}
 	if _, e = tx.Exec(ctx, `UPDATE template_active SET release_id=$1 WHERE id`, id); e != nil {
 		return 0, 0, e
 	}
-	// Reprocess every current unresolved sample, and samples that previously
-	// used managed templates. Each source is durable; batching happens in B.
-	// Invalid captures (including duplicate list frames) cannot be fixed by an
-	// icon template. Every needs_review sample is retried, even without a candidate.
-	queued, e := queueUnresolved(ctx, tx, true)
+	// Pure parser failures cannot be repaired by publishing an icon. New/changed
+	// matchers retry missing icons; existing users only retry changed matchers.
+	queued, e := queueTemplateRetries(ctx, tx, retryMissing, changed)
 	if e != nil {
 		return 0, 0, e
 	}
 	return id, queued, nil
 }
 
-func queueUnresolved(ctx context.Context, tx pgx.Tx, includeManaged bool) (int64, error) {
+func changedRecognitionTemplates(previous, next []byte) ([]string, bool, error) {
+	before, after := []Template{}, []Template{}
+	if len(previous) > 0 {
+		if e := json.Unmarshal(previous, &before); e != nil {
+			return nil, false, e
+		}
+	}
+	if e := json.Unmarshal(next, &after); e != nil {
+		return nil, false, e
+	}
+	old := map[string]Template{}
+	for _, t := range before {
+		if t.Enabled {
+			old[t.ID] = t
+		}
+	}
+	changed := []string{}
+	retryMissing := false
+	for _, t := range after {
+		if !t.Enabled {
+			continue
+		}
+		prior, exists := old[t.ID]
+		if !exists || prior.ItemID != t.ItemID || prior.Scene != t.Scene || prior.Image != t.Image {
+			changed = append(changed, t.ID)
+			retryMissing = true
+		}
+		delete(old, t.ID)
+	}
+	for id := range old {
+		changed = append(changed, id)
+	}
+	return changed, retryMissing, nil
+}
+
+func queueTemplateRetries(ctx context.Context, tx pgx.Tx, retryMissing bool, changed []string) (int64, error) {
 	var release *int64
 	if e := tx.QueryRow(ctx, `SELECT release_id FROM template_active WHERE id`).Scan(&release); e != nil {
 		return 0, e
@@ -240,7 +282,7 @@ func queueUnresolved(ctx context.Context, tx pgx.Tx, includeManaged bool) (int64
 	// A worker may already have fetched a command still marked pending on C.
 	// Never merge a new publication into that older command: its local ID is
 	// idempotent and it may already have run with the previous templates.
-	queued, e := tx.Exec(ctx, `INSERT INTO worker_commands(action,payload) SELECT 'reprocess',jsonb_build_object('sources',jsonb_build_array(r.payload->'source'),'templates','[]'::jsonb,'template_release',$2::bigint) FROM stat_results r WHERE (status='needs_review' OR ($1 AND CASE WHEN jsonb_typeof(r.payload->'used_templates')='array' THEN jsonb_array_length(r.payload->'used_templates') ELSE 0 END>0)) AND NOT EXISTS (SELECT 1 FROM worker_commands c WHERE c.action='reprocess' AND c.state='pending' AND COALESCE((c.payload->>'template_release')::bigint,0)=$2 AND c.payload->'sources' @> jsonb_build_array(r.payload->'source'))`, includeManaged, version)
+	queued, e := tx.Exec(ctx, `INSERT INTO worker_commands(action,payload) SELECT 'reprocess',jsonb_build_object('sources',jsonb_build_array(r.payload->'source'),'templates','[]'::jsonb,'template_release',$2::bigint) FROM stat_results r WHERE (($1 AND status='needs_review' AND `+missingTemplateSQL+`) OR (r.payload->'used_templates') ?| $3::text[]) AND NOT EXISTS (SELECT 1 FROM worker_commands c WHERE c.action='reprocess' AND c.state='pending' AND COALESCE((c.payload->>'template_release')::bigint,0)=$2 AND c.payload->'sources' @> jsonb_build_array(r.payload->'source'))`, retryMissing, version, changed)
 	return queued.RowsAffected(), e
 }
 
@@ -256,7 +298,7 @@ func (s *Service) reprocessUnresolved(w http.ResponseWriter, r *http.Request) {
 		internal(w, e)
 		return
 	}
-	queued, e := queueUnresolved(r.Context(), tx, false)
+	queued, e := queueTemplateRetries(r.Context(), tx, true, []string{})
 	if e != nil {
 		internal(w, e)
 		return

@@ -423,14 +423,21 @@ func TestCandidateAutomaticallyResolvesAndReopens(t *testing.T) {
 
 func TestReprocessUnresolvedMergesConcurrentClicks(t *testing.T) {
 	s := service(t)
+	if rec := call(t, s, "POST", "/api/v1/admin/templates/publish", "admin-token", nil); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
 	unresolved := fixture(t)
 	unresolved.Status = "needs_review"
-	unresolved.Diagnostics = []string{"unknown_project_without_candidate"}
+	unresolved.Diagnostics = []string{"missing_template:" + strings.Repeat("d", 64)}
+	unresolved.Candidates = []string{strings.Repeat("d", 64)}
+	parserFailure := fixture(t)
+	parserFailure.Status = "needs_review"
+	parserFailure.Diagnostics = []string{"unknown_project_without_candidate"}
 	invalid := fixture(t)
 	invalid.Status, invalid.Events = "invalid", nil
 	invalid.Diagnostics = []string{"duplicate_research_list_capture"}
 	complete := fixture(t)
-	for _, result := range []Result{unresolved, invalid, complete} {
+	for _, result := range []Result{unresolved, invalid, complete, parserFailure} {
 		if _, e := s.Apply(context.Background(), result); e != nil {
 			t.Fatal(e)
 		}
@@ -447,30 +454,108 @@ func TestReprocessUnresolvedMergesConcurrentClicks(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	for _, result := range []Result{unresolved, invalid, complete} {
+	for _, result := range []Result{unresolved, invalid, complete, parserFailure} {
 		var count int
 		e := s.Pool.QueryRow(context.Background(), `SELECT count(*) FROM worker_commands WHERE action='reprocess' AND payload->'sources' @> $1::jsonb`, "[{\"sha256\":\""+result.SHA256+"\"}]").Scan(&count)
 		want := 0
-		if result.Status == "needs_review" {
+		if len(result.Candidates) > 0 {
 			want = 1
 		}
 		if e != nil || count != want {
 			t.Fatalf("%s: got %d commands, want %d: %v", result.Status, count, want, e)
 		}
 	}
-	// Count original files and submissions separately without breaking old clients.
-	// A new release must get its own retry even when an older command is still
-	// pending on C but has already been received by B.
+	// Republishing an unchanged package must not scan failures again.
 	if rec := call(t, s, "POST", "/api/v1/admin/templates/publish", "admin-token", nil); rec.Code != 200 {
 		t.Fatal(rec.Body.String())
 	}
 	var versions int
-	if e := s.Pool.QueryRow(context.Background(), `SELECT count(*) FROM worker_commands WHERE action='reprocess' AND payload->'sources' @> $1::jsonb`, "[{\"sha256\":\""+unresolved.SHA256+"\"}]").Scan(&versions); e != nil || versions != 2 {
-		t.Fatal("new release was incorrectly merged with an older command", versions, e)
+	if e := s.Pool.QueryRow(context.Background(), `SELECT count(*) FROM worker_commands WHERE action='reprocess' AND payload->'sources' @> $1::jsonb`, "[{\"sha256\":\""+unresolved.SHA256+"\"}]").Scan(&versions); e != nil || versions != 1 {
+		t.Fatal("unchanged publication unnecessarily repeated a failure", versions, e)
 	}
 	// Count original files and submissions separately without breaking old clients.
 	rec := call(t, s, "GET", "/api/v1/admin/statistics/overview", "admin-token", nil)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"image_counts"`) || !strings.Contains(rec.Body.String(), `"counts"`) {
 		t.Fatal(rec.Body.String())
+	}
+}
+
+func TestTemplatePublicationOnlyRetriesRelevantFailures(t *testing.T) {
+	s := service(t)
+	ctx := context.Background()
+	a := Template{ID: strings.Repeat("a", 64), ItemID: "Coins", Enabled: true, Scene: "all", Image: "a"}
+	b := Template{ID: strings.Repeat("b", 64), ItemID: "Chips", Enabled: true, Scene: "all", Image: "b"}
+	c := Template{ID: strings.Repeat("c", 64), ItemID: "NewItem", Enabled: true, Scene: "all", Image: "c"}
+	activate := func(templates []Template) {
+		t.Helper()
+		payload, e := json.Marshal(templates)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = s.createRelease(ctx, payload); e != nil {
+			t.Fatal(e)
+		}
+	}
+	activate([]Template{a, b})
+	missing, parser, usedA, usedB := fixture(t), fixture(t), fixture(t), fixture(t)
+	missing.Status = "needs_review"
+	missing.Candidates = []string{c.ID}
+	missing.Diagnostics = []string{"missing_template:" + c.ID}
+	parser.Status = "needs_review"
+	parser.Diagnostics = []string{"no_complete_reward_frame"}
+	usedA.UsedTemplates = []string{a.ID}
+	usedB.UsedTemplates = []string{b.ID}
+	for _, r := range []Result{missing, parser, usedA, usedB} {
+		if _, e := s.Apply(ctx, r); e != nil {
+			t.Fatal(e)
+		}
+	}
+	expect := func(wantMissing, wantA int) {
+		t.Helper()
+		for i, r := range []Result{missing, parser, usedA, usedB} {
+			var count int
+			if e := s.Pool.QueryRow(ctx, `SELECT count(*) FROM worker_commands WHERE action='reprocess' AND payload->'sources' @> $1::jsonb`, "[{\"sha256\":\""+r.SHA256+"\"}]").Scan(&count); e != nil {
+				t.Fatal(e)
+			}
+			want := 0
+			if i == 0 {
+				want = wantMissing
+			}
+			if i == 2 {
+				want = wantA
+			}
+			if count != want {
+				t.Fatalf("source %d: got %d, want %d", i, count, want)
+			}
+		}
+	}
+	activate([]Template{a, b, c})
+	expect(1, 0) // New template: only missing icons.
+	a.ItemID = "CorrectedCoins"
+	activate([]Template{a, b, c})
+	expect(2, 1) // Changed matcher: users of A, not B.
+	a.Enabled = false
+	activate([]Template{a, b, c})
+	expect(2, 2) // Removal cannot repair missing icons.
+	a.Enabled = true
+	activate([]Template{a, b, c})
+	expect(3, 3) // Rollback/re-enable restores matcher.
+	b.Name = "display-only change"
+	activate([]Template{a, b, c})
+	expect(3, 3)
+	activate([]Template{a, b, c})
+	expect(3, 3)
+	for _, reason := range []string{"missing_template", "parser_failure"} {
+		rec := call(t, s, "GET", "/api/v1/admin/statistics/results?status=needs_review&reason="+reason, "admin-token", nil)
+		if rec.Code != 200 {
+			t.Fatal(rec.Body.String())
+		}
+		wanted, excluded := missing.SHA256, parser.SHA256
+		if reason == "parser_failure" {
+			wanted, excluded = excluded, wanted
+		}
+		if !strings.Contains(rec.Body.String(), wanted) || strings.Contains(rec.Body.String(), excluded) {
+			t.Fatal("failure categories mixed", rec.Body.String())
+		}
 	}
 }

@@ -82,7 +82,7 @@ function ItemsTable({ items }: { items: Item[] }) {
     <p className="public-note">每行按项目、场景和掉落标签独立统计；单次均量包含未掉落该物品的样本。</p>
     {filtered.length ? <><div className="table-wrap"><table className="public-table"><thead><tr><th>物品</th><th>项目 / 场景</th><th>总数量</th><th>掉落样本 / 有效样本</th><th>掉落率</th><th>单次均量</th><th>每小时</th></tr></thead><tbody>
       {filtered.slice(current * 25, (current + 1) * 25).map((row) => <tr key={`${keyOf(row)}:${row.scene}:${row.item}:${row.tag}`}><td><strong>{row.item}</strong><span className="public-cell-note">{tags[row.tag] ?? row.tag}</span></td><td>{groupLabel(row)}<span className="public-cell-note">{row.scene || '未标注场景'}</span></td><td>{number(row.amount)}</td><td>{number(row.occurrences)} / {number(row.samples)}</td><td>{percent(row.drop_rate)}</td><td>{row.average_per_sample.toFixed(3)}</td><td>{row.amount_per_hour === null ? '—' : row.amount_per_hour.toFixed(3)}</td></tr>)}
-    </tbody></table></div><div className="public-pagination"><span>{number(filtered.length)} 条 · 第 {current + 1} / {pages} 页</span><div><button className="ghost" disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</button><button className="ghost" disabled={current + 1 >= pages} onClick={() => setPage(current + 1)}>下一页</button></div></div></> : <div className="public-empty"><strong>{search ? '没有符合搜索的物品' : '当前筛选暂无掉落数据'}</strong><p>仅识别完整的结果计入统计。待复核截图会在模板补齐并重识别后更新。</p></div>}
+    </tbody></table></div><div className="public-pagination"><span>{number(filtered.length)} 条 · 第 {current + 1} / {pages} 页</span><div><button className="ghost" disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</button><button className="ghost" disabled={current + 1 >= pages} onClick={() => setPage(current + 1)}>下一页</button></div></div></> : <div className="public-empty"><strong>{search ? '没有符合搜索的物品' : '当前筛选暂无掉落数据'}</strong><p>仅识别完整的结果计入统计。识别失败的截图会在模板补齐并重识别后更新。</p></div>}
   </section>
 }
 
@@ -147,7 +147,7 @@ export function PublicStatistics() {
         </section></>}
         <ItemsTable items={summary.items} />
       </>}
-      <aside className="public-method"><h2>统计口径</h2><p>一次上报可以包含多张原图，完成记录、项目槽位和图片张数是不同单位。只有完整识别的事件参与统计；待复核或无效截图不计入。新模板重识别会替换旧结果，不重复累加。</p><p>项目出现占比是观测中的相对频率，不等同于游戏公开概率。区服、科研倾向、项目期数和采集时段会影响样本分布。每小时均量仅使用含有效时长的样本，缺失时长显示“—”。</p><a href={query || '/api/v2/get/research'}>查看当前查询的 JSON ↗</a></aside>
+      <aside className="public-method"><h2>统计口径</h2><p>一次上报可以包含多张原图，完成记录、项目槽位和图片张数是不同单位。只有完整识别的事件参与统计；识别失败或无效截图不计入。新模板重识别会替换旧结果，不重复累加。</p><p>项目出现占比是观测中的相对频率，不等同于游戏公开概率。区服、科研倾向、项目期数和采集时段会影响样本分布。每小时均量仅使用含有效时长的样本，缺失时长显示“—”。</p><a href={query || '/api/v2/get/research'}>查看当前查询的 JSON ↗</a></aside>
     </main><footer className="public-footer">AzurPilot · 社区截图统计<span>数据随识别结果更新</span></footer>
   </div>
 }
