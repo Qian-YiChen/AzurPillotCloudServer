@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -59,7 +60,7 @@ func (s *Server) handleLegacyTelemetry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, errValidation("无效旧版遥测正文", "body"))
 		return
 	}
-	if err = d.Decode(&struct{}{}); err != io.EOF {
+	if err = d.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		writeError(w, r, errInvalidJSON())
 		return
 	}

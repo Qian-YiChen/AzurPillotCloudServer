@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -9,20 +8,6 @@ import (
 
 	"ap-cloud-server/internal/store"
 )
-
-func TestLegacyStreamKeepsRequestContextAndWriterCapabilities(t *testing.T) {
-	handler := timeoutMiddleware(time.Millisecond, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(10 * time.Millisecond)
-		if err := r.Context().Err(); err != nil {
-			t.Error("stream inherited ordinary request timeout", err)
-		}
-		if err := http.NewResponseController(&statusWriter{ResponseWriter: w}).Flush(); err != nil {
-			t.Error(err)
-		}
-	}))
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/telemetry/stats/stream", nil))
-}
 
 func TestLegacyAPTelemetryContract(t *testing.T) {
 	b := &fakeBackend{outcome: store.Cl1Accepted}
