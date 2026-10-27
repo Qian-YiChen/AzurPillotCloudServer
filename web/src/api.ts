@@ -1,5 +1,5 @@
 // 管理 API 客户端：统一携带 Bearer Token、解析统一错误信封。
-import type { Announcement, Maintenance, PublishRecord, PublishResult } from './types'
+import type { Announcement, Maintenance, MaintenanceSource, PublishRecord, PublishResult } from './types'
 
 const TOKEN_KEY = 'ap_admin_token'
 
@@ -101,6 +101,8 @@ export const api = {
     }),
 
   listMaintenance: () => request<{ maintenances: Maintenance[] }>('GET', '/api/v1/admin/maintenance'),
+  maintenanceSource: () => request<MaintenanceSource>('GET', '/api/v1/admin/maintenance/source'),
+  syncMaintenance: () => request<MaintenanceSource>('POST', '/api/v1/admin/maintenance/source'),
   saveMaintenance: (server: string, payload: { name: string; starts_at: string; ends_at?: string }) =>
     request<{ saved: boolean }>('PUT', `/api/v1/admin/maintenance/${server}`, payload),
   deleteMaintenance: (server: string) =>

@@ -72,7 +72,10 @@ type Config struct {
 	// PublishDir 为公告 / 更新策略静态文件的本地生成目录。
 	PublishDir string
 	// PublishTimeout 为单次发布的整体超时。
-	PublishTimeout time.Duration
+	PublishTimeout          time.Duration
+	MaintenanceSyncEnabled  bool
+	MaintenanceSyncInterval time.Duration
+	MaintenanceSyncTimeout  time.Duration
 
 	Cloudflare Cloudflare
 }
@@ -80,27 +83,30 @@ type Config struct {
 // Load 从环境变量读取配置并填充默认值。
 func Load() (Config, error) {
 	cfg := Config{
-		ListenAddr:           env("LISTEN_ADDR", ":8080"),
-		DatabaseURL:          env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/apcloud?sslmode=disable"),
-		AdminToken:           env("ADMIN_TOKEN", ""),
-		StatisticsToken:      env("STATISTICS_TOKEN", ""),
-		LegacyUploadURL:      env("LEGACY_UPLOAD_PUBLIC_URL", ""),
-		RecognizerURL:        env("RECOGNIZER_URL", ""),
-		WorkerToken:          env("WORKER_TOKEN", ""),
-		StatisticsFileBytes:  int64(envInt("MAX_FILE_BYTES", 10<<20)),
-		StatisticsGroupBytes: int64(envInt("MAX_GROUP_BYTES", 500<<20)),
-		LogLevel:             env("LOG_LEVEL", "info"),
-		RequestTimeout:       envDuration("REQUEST_TIMEOUT", 15*time.Second),
-		ShutdownGrace:        envDuration("SHUTDOWN_GRACE", 30*time.Second),
-		RateLimitRPS:         envFloat("RATE_LIMIT_RPS", 20),
-		RateLimitBurst:       envInt("RATE_LIMIT_BURST", 40),
-		GatewayTimeout:       envDuration("GATEWAY_TIMEOUT", 10*time.Second),
-		CacheTTL:             envDuration("CACHE_TTL", 8*time.Second),
-		CacheRefreshInterval: envDuration("CACHE_REFRESH_INTERVAL", 5*time.Second),
-		DedupTTL:             envDuration("DEDUP_TTL", 24*time.Hour),
-		JanitorInterval:      envDuration("JANITOR_INTERVAL", time.Hour),
-		PublishDir:           env("PUBLISH_DIR", "public"),
-		PublishTimeout:       envDuration("PUBLISH_TIMEOUT", 90*time.Second),
+		ListenAddr:              env("LISTEN_ADDR", ":8080"),
+		DatabaseURL:             env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/apcloud?sslmode=disable"),
+		AdminToken:              env("ADMIN_TOKEN", ""),
+		StatisticsToken:         env("STATISTICS_TOKEN", ""),
+		LegacyUploadURL:         env("LEGACY_UPLOAD_PUBLIC_URL", ""),
+		RecognizerURL:           env("RECOGNIZER_URL", ""),
+		WorkerToken:             env("WORKER_TOKEN", ""),
+		StatisticsFileBytes:     int64(envInt("MAX_FILE_BYTES", 10<<20)),
+		StatisticsGroupBytes:    int64(envInt("MAX_GROUP_BYTES", 500<<20)),
+		LogLevel:                env("LOG_LEVEL", "info"),
+		RequestTimeout:          envDuration("REQUEST_TIMEOUT", 15*time.Second),
+		ShutdownGrace:           envDuration("SHUTDOWN_GRACE", 30*time.Second),
+		RateLimitRPS:            envFloat("RATE_LIMIT_RPS", 20),
+		RateLimitBurst:          envInt("RATE_LIMIT_BURST", 40),
+		GatewayTimeout:          envDuration("GATEWAY_TIMEOUT", 10*time.Second),
+		CacheTTL:                envDuration("CACHE_TTL", 8*time.Second),
+		CacheRefreshInterval:    envDuration("CACHE_REFRESH_INTERVAL", 5*time.Second),
+		DedupTTL:                envDuration("DEDUP_TTL", 24*time.Hour),
+		JanitorInterval:         envDuration("JANITOR_INTERVAL", time.Hour),
+		PublishDir:              env("PUBLISH_DIR", "public"),
+		PublishTimeout:          envDuration("PUBLISH_TIMEOUT", 90*time.Second),
+		MaintenanceSyncEnabled:  env("MAINTENANCE_SYNC_ENABLED", "true") != "false",
+		MaintenanceSyncInterval: envDuration("MAINTENANCE_SYNC_INTERVAL", 10*time.Minute),
+		MaintenanceSyncTimeout:  envDuration("MAINTENANCE_SYNC_TIMEOUT", 12*time.Second),
 	}
 	cfg.Cloudflare = Cloudflare{
 		AccountID:       env("CF_ACCOUNT_ID", ""),
@@ -124,6 +130,9 @@ func Load() (Config, error) {
 	}
 	if cfg.StatisticsFileBytes < 8 || cfg.StatisticsGroupBytes < cfg.StatisticsFileBytes {
 		return cfg, fmt.Errorf("invalid statistics file/group limits")
+	}
+	if cfg.MaintenanceSyncInterval < time.Minute || cfg.MaintenanceSyncTimeout <= 0 || cfg.MaintenanceSyncTimeout > 12*time.Second {
+		return cfg, fmt.Errorf("维护同步间隔至少 1m，超时需在 0–12s 之间")
 	}
 	return cfg, nil
 }

@@ -21,6 +21,21 @@ export interface Maintenance {
   starts_at: string
   ends_at: string | null
   updated_at: string
+  source?: 'manual' | 'official'
+  source_url?: string
+}
+
+export interface MaintenanceSource {
+  server: string
+  title: string
+  url: string
+  plan: Maintenance | null
+  checked_at: string | null
+  synced_at: string | null
+  error: string
+  enabled: boolean
+  interval_seconds: number
+  running: boolean
 }
 
 export interface PublishRecord {

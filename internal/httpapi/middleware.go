@@ -187,6 +187,13 @@ func timeoutMiddleware(d, publishTimeout time.Duration, next http.Handler) http.
 		if strings.HasPrefix(r.URL.Path, "/api/v1/admin/statistics/preview/") {
 			timeout = 50 * time.Second
 		}
+		if strings.HasPrefix(r.URL.Path, "/api/v1/uploads/") {
+			timeout = 90 * time.Second
+			controller := http.NewResponseController(w)
+			_ = controller.SetReadDeadline(time.Now().Add(timeout))
+			_ = controller.SetWriteDeadline(time.Now().Add(timeout + 5*time.Second))
+			defer func() { _ = controller.SetReadDeadline(time.Time{}); _ = controller.SetWriteDeadline(time.Time{}) }()
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
 		next.ServeHTTP(w, r.WithContext(ctx))

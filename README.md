@@ -115,7 +115,7 @@ Cloudflare-Workers-Version-Key: <与设备ID相同>
 - **Token 登录**：输入服务端 `ADMIN_TOKEN`，凭据只保存在浏览器 localStorage；
 - **公告管理**：发布（自动触发公告 Worker 发布）、撤回（发布 `announcement: null`）；
 - **更新策略**：`force_update` 开关，保存即发布；
-- **维护计划**：国服/国际服/日服/台服四张卡片，datetime-local 本地时间输入、自动转 RFC 3339；
+- **维护计划**：国服启动时及每 10 分钟同步[官方维护公告](https://game.bilibili.com/blhx/news/)，后台可立即同步、查看原文和失败诊断；人工覆盖优先，删除覆盖恢复官方计划。其他区服暂由人工录入；
 - **发布状态**：每个 Worker 最近一次发布结果（成功 / 仅本地 / 失败 + 错误），30 秒自动刷新；
 - 401 自动回到登录页；服务端未配置 `ADMIN_TOKEN` 时给出明确提示。
 

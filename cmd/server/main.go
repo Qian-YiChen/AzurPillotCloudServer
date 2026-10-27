@@ -25,6 +25,7 @@ import (
 	"ap-cloud-server/internal/config"
 	"ap-cloud-server/internal/gateway"
 	"ap-cloud-server/internal/httpapi"
+	"ap-cloud-server/internal/maintenance"
 	"ap-cloud-server/internal/publish"
 	"ap-cloud-server/internal/statistics"
 	"ap-cloud-server/internal/statuscache"
@@ -91,6 +92,11 @@ func run() error {
 	publisher.Run(ctx)
 	defer publisher.Close()
 
+	maintenanceSync := maintenance.New(st, cfg.MaintenanceSyncEnabled,
+		cfg.MaintenanceSyncInterval, cfg.MaintenanceSyncTimeout, logger)
+	maintenanceSync.Run(ctx)
+	defer maintenanceSync.Close()
+
 	// 4. 清理协程（去重记录过期等）。
 	cleanupCtx, cleanupCancel := context.WithCancel(context.WithoutCancel(ctx))
 	janitorDone := make(chan struct{})
@@ -105,13 +111,14 @@ func run() error {
 
 	// 5. HTTP 服务。
 	srv := httpapi.New(httpapi.Deps{
-		Statistics: statistics.New(st.Pool, cfg.StatisticsToken, cfg.AdminToken).WithWorker(cfg.RecognizerURL, cfg.WorkerToken).WithLimits(cfg.StatisticsFileBytes, cfg.StatisticsGroupBytes),
-		Cfg:        cfg,
-		Store:      st,
-		Cache:      cache,
-		Pub:        publisher,
-		Logger:     logger,
-		AdminUI:    adminui.Handler(),
+		Maintenance: maintenanceSync,
+		Statistics:  statistics.New(st.Pool, cfg.StatisticsToken, cfg.AdminToken).WithWorker(cfg.RecognizerURL, cfg.WorkerToken).WithLimits(cfg.StatisticsFileBytes, cfg.StatisticsGroupBytes),
+		Cfg:         cfg,
+		Store:       st,
+		Cache:       cache,
+		Pub:         publisher,
+		Logger:      logger,
+		AdminUI:     adminui.Handler(),
 	})
 	srv.Run(ctx)
 	defer srv.Close()

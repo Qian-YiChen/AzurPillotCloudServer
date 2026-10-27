@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"ap-cloud-server/internal/config"
+	"ap-cloud-server/internal/maintenance"
 	"ap-cloud-server/internal/publish"
 	"ap-cloud-server/internal/statistics"
 	"ap-cloud-server/internal/statuscache"
@@ -33,13 +34,19 @@ type Backend interface {
 }
 
 // Deps 是 HTTP 服务依赖。
+type MaintenanceSync interface {
+	Status(context.Context) (maintenance.Status, error)
+	Sync(context.Context) error
+}
+
 type Deps struct {
-	Statistics *statistics.Service
-	Cfg        config.Config
-	Store      Backend
-	Cache      *statuscache.Cache
-	Pub        *publish.Publisher
-	Logger     *slog.Logger
+	Maintenance MaintenanceSync
+	Statistics  *statistics.Service
+	Cfg         config.Config
+	Store       Backend
+	Cache       *statuscache.Cache
+	Pub         *publish.Publisher
+	Logger      *slog.Logger
 	// AdminUI 是管理后台前端处理器（internal/adminui.Handler() 提供）；nil 时退回 404。
 	AdminUI http.Handler
 	// Now 可注入时钟，测试用；nil 时使用 time.Now。
@@ -103,6 +110,9 @@ func New(deps Deps) *Server {
 	mux.HandleFunc("/api/maintenance", legacyPublic(s.handleLegacyMaintenance))
 	mux.HandleFunc("/api/upload", legacyPublic(s.handleLegacyUploadRedirect))
 	mux.HandleFunc("/api/upload/{$}", legacyPublic(s.handleLegacyUploadRedirect))
+	mux.HandleFunc("POST /api/v1/uploads/init", s.handleUploadGateway)
+	mux.HandleFunc("PUT /api/v1/uploads/{id}/files/{index}", s.handleUploadGateway)
+	mux.HandleFunc("POST /api/v1/uploads/{id}/complete", s.handleUploadGateway)
 	if deps.Statistics != nil {
 		deps.Statistics.Register(mux)
 	}
@@ -110,6 +120,7 @@ func New(deps Deps) *Server {
 	mux.HandleFunc("/api/v1/admin/announcement", s.adminAuth(s.handleAdminAnnouncement))
 	mux.HandleFunc("/api/v1/admin/update-policy", s.adminAuth(s.handleAdminUpdatePolicy))
 	mux.HandleFunc("/api/v1/admin/maintenance", s.adminAuth(s.handleAdminMaintenance))
+	mux.HandleFunc("/api/v1/admin/maintenance/source", s.adminAuth(s.handleAdminMaintenanceSource))
 	mux.HandleFunc("/api/v1/admin/maintenance/{server}", s.adminAuth(s.handleAdminMaintenance))
 	mux.HandleFunc("/api/v1/admin/publish/status", s.adminAuth(s.handleAdminPublishStatus))
 	// 管理后台前端（React 构建产物，见 web/ 与 internal/adminui）。

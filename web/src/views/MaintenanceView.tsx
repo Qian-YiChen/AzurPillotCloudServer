@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { MAINTENANCE_SERVERS, SERVER_LABELS } from '../types'
 import type { Maintenance, MaintenanceServer } from '../types'
@@ -81,7 +81,7 @@ function ServerCard({
         </h2>
         {!editing && (
           <button type="button" onClick={startEdit}>
-            {plan ? '修改' : '设置'}
+            {plan?.source === 'official' ? '人工覆盖' : plan ? '修改' : '设置'}
           </button>
         )}
       </header>
@@ -132,9 +132,9 @@ function ServerCard({
             >
               取消
             </button>
-            {plan && (
+            {plan && plan.source !== 'official' && (
               <button type="button" className="danger" disabled={action.running} onClick={() => void remove()}>
-                删除计划
+                {server === 'cn' ? '删除人工覆盖' : '删除计划'}
               </button>
             )}
           </div>
@@ -142,6 +142,7 @@ function ServerCard({
       ) : (
         <table className="detail">
           <tbody>
+            <tr><th>来源</th><td>{plan?.source === 'official' ? <a href={plan.source_url} target="_blank" rel="noreferrer">国服官方公告</a> : plan ? '人工录入' : '—'}</td></tr>
             <tr>
               <th>名称</th>
               <td>{plan?.name ?? '—'}</td>
@@ -164,6 +165,23 @@ function ServerCard({
 // 维护计划管理：四个区服各一张卡片。
 export function MaintenanceView() {
   const load = useLoad(() => api.listMaintenance(), [])
+  const source = useLoad(() => api.maintenanceSource(), [])
+  useEffect(() => {
+    const timer = window.setInterval(source.reload, 30000)
+    return () => window.clearInterval(timer)
+    // reload only increments the hook's stable state setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const action = useAction()
+  const sync = () => action.run(async () => {
+    try {
+      await api.syncMaintenance()
+      return '官方公告同步完成'
+    } finally {
+      source.reload()
+      load.reload()
+    }
+  })
 
   const byServer = new Map<string, Maintenance>()
   for (const m of load.data?.maintenances ?? []) {
@@ -172,6 +190,22 @@ export function MaintenanceView() {
 
   return (
     <>
+      <Card title="国服官方维护公告" extra={
+        <button type="button" disabled={action.running || source.loading || source.data?.running} onClick={() => void sync()}>
+          {action.running ? '同步中…' : '立即同步'}
+        </button>
+      }>
+        <p className="muted">国服默认每 10 分钟检查官方公告。人工覆盖优先生效，删除覆盖后恢复官方计划。其他区服暂由人工录入。</p>
+        {source.data && <table className="detail"><tbody>
+          <tr><th>自动同步</th><td>{source.data.enabled ? `已开启 · 每 ${source.data.interval_seconds / 60} 分钟` : '已关闭'}</td></tr>
+          <tr><th>最新公告</th><td><a href={source.data.url} target="_blank" rel="noreferrer">{source.data.title || '查看官方公告页'}</a></td></tr>
+          <tr><th>最近检查</th><td>{source.data.checked_at ? formatTime(source.data.checked_at) : '尚未检查'}</td></tr>
+          <tr><th>最近成功</th><td>{source.data.synced_at ? formatTime(source.data.synced_at) : '尚未成功同步'}</td></tr>
+          <tr><th>同步状态</th><td>{source.data.error ? <span className="form-err">{source.data.error}（保留上次结果）</span> : source.data.synced_at ? '正常' : '等待同步'}</td></tr>
+        </tbody></table>}
+        {source.error && <p className="form-err">{source.error}</p>}
+        {action.message && <p className={action.message.kind === 'ok' ? 'form-ok' : 'form-err'}>{action.message.text}</p>}
+      </Card>
       <Card
         title="区服维护计划"
         extra={
@@ -181,7 +215,7 @@ export function MaintenanceView() {
         }
       >
         <p className="muted">
-          计划保存后立即对 GET /api/v2/get/maintenance 生效；已结束（ends_at 过去）的安排不会再下发给客户端。
+          已结束的安排仅供核对，不下发给客户端。未发布新的维护公告时，不推算下次维护时间。
         </p>
         {load.error && <p className="form-err">{load.error}</p>}
       </Card>

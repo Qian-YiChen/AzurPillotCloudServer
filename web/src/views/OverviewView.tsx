@@ -24,7 +24,7 @@ export function OverviewView({ onNavigate }: { onNavigate: (section: string) => 
   const a: Announcement | null = announcement.data?.announcement ?? null
   const force = policy.data?.force_update ?? false
   const plans = (maintenance.data?.maintenances ?? []).filter((m: Maintenance) =>
-    MAINTENANCE_SERVERS.includes(m.server as (typeof MAINTENANCE_SERVERS)[number]),
+    MAINTENANCE_SERVERS.includes(m.server as (typeof MAINTENANCE_SERVERS)[number]) && (!m.ends_at || new Date(m.ends_at) >= new Date()),
   )
   const history = publish.data?.publish_history ?? {}
   const records: PublishRecord[] = Object.values(history).sort(
