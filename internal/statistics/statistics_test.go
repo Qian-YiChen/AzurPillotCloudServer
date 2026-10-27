@@ -22,9 +22,12 @@ import (
 	"ap-cloud-server/internal/store"
 )
 
+var fixtureSequence atomic.Uint64
+
 func fixture(t *testing.T) Result {
 	t.Helper()
-	f := sha256.Sum256([]byte(t.Name() + time.Now().String()))
+	// Windows clocks may return the same timestamp for consecutive fixtures.
+	f := sha256.Sum256([]byte(t.Name() + time.Now().String() + jsonNumber(int64(fixtureSequence.Add(1)))))
 	sum := sha256.Sum256(f[:])
 	hash := hex.EncodeToString(sum[:])
 	source := Source{SHA256: hash, Metadata: Metadata{DeviceID: strings.Repeat("a", 32), InstanceID: strings.Repeat("b", 16), Project: "drop", Scene: "test_" + hash[:12], Server: "cn", CollectedAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339), Sizes: []int64{8}}, Files: []SourceFile{{Index: 0, Size: 8, SHA256: hex.EncodeToString(f[:]), FileID: 1}}}

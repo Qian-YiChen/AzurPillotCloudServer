@@ -37,7 +37,6 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	to := s.Now().UTC()
-	from := to.AddDate(0, 0, -30)
 	var e error
 	if q.Get("to") != "" {
 		to, e = time.Parse(time.RFC3339Nano, q.Get("to"))
@@ -46,6 +45,7 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	from := to.AddDate(0, 0, -30)
 	if q.Get("from") != "" {
 		from, e = time.Parse(time.RFC3339Nano, q.Get("from"))
 		if e != nil {
@@ -61,8 +61,10 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	focus := 0
-	if q.Get("focus_series") != "" {
+	focus := -1
+	if q.Get("focus_series") == "unknown" {
+		focus = 0
+	} else if q.Get("focus_series") != "" {
 		focus, e = strconv.Atoi(q.Get("focus_series"))
 		if e != nil || focus < 1 || focus > 100 {
 			fail(w, 400, "VALIDATION_ERROR", "无效科研倾向期数")
@@ -71,7 +73,12 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 	}
 	zone := q.Get("timezone")
 	if zone == "" {
-		zone = "Asia/Shanghai"
+		// Preserve the existing UTC daily-summary contract. The public UI sends
+		// Asia/Shanghai explicitly; half-hour queries retain their own default.
+		zone = "UTC"
+		if strings.HasSuffix(r.URL.Path, "/time-slots") {
+			zone = "Asia/Shanghai"
+		}
 	}
 	if _, e = time.LoadLocation(zone); e != nil {
 		fail(w, 400, "VALIDATION_ERROR", "无效时区")
@@ -86,15 +93,53 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 		kind = "research"
 	}
 	args := []any{kind, from, to, q.Get("server"), q.Get("scene"), series, q.Get("project"), focus}
-	filtered := `WITH base AS (SELECT * FROM stat_events WHERE kind=$1 AND occurred_at >=$2 AND occurred_at<$3 AND ($4='' OR server=$4) AND ($5='' OR scene=$5) AND ($6::int=0 OR series=$6) AND ($8::int=0 OR focus_series=$8)),filtered AS (SELECT * FROM base WHERE ($7='' OR project=$7)) `
+	// Keep discovery independent of the chosen dimension. Project filtering must
+	// not change the denominator, and different series/focuses never share one.
+	filtered := `WITH scope AS (
+ SELECT * FROM stat_events WHERE kind=$1 AND occurred_at >=$2 AND occurred_at<$3 AND ($4='' OR server=$4)
+), base AS (
+ SELECT * FROM scope WHERE ($5='' OR scene=$5) AND ($6::int=0 OR series=$6) AND ($8::int=-1 OR focus_series=$8)
+), filtered AS (SELECT * FROM base WHERE ($7='' OR project=$7)) `
 	tx, e := s.Pool.BeginTx(r.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if e != nil {
 		internal(w, e)
 		return
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
+	if strings.HasSuffix(r.URL.Path, "/options") {
+		rows, err := tx.Query(r.Context(), filtered+`SELECT series,focus_series,scene,count(*) AS events,count(*) FILTER(WHERE event_type='refresh') AS appearances,count(*) FILTER(WHERE event_type<>'refresh') AS samples FROM scope GROUP BY series,focus_series,scene ORDER BY series DESC,focus_series DESC,scene LIMIT 10001`, args...)
+		if err != nil {
+			internal(w, err)
+			return
+		}
+		options, err := collect(rows)
+		if err != nil {
+			internal(w, err)
+			return
+		}
+		if len(options) > 10000 {
+			fail(w, 400, "QUERY_TOO_BROAD", "请缩小筛选范围")
+			return
+		}
+		if err = tx.Commit(r.Context()); err != nil {
+			internal(w, err)
+			return
+		}
+		output(w, 200, map[string]any{"schema_version": 2, "from": from, "to": to, "options": options})
+		return
+	}
 	if strings.HasSuffix(r.URL.Path, "/time-slots") {
-		rows, err := tx.Query(r.Context(), filtered+`,bucketed AS (SELECT *, (extract(hour FROM occurred_at AT TIME ZONE $9)*2+floor(extract(minute FROM occurred_at AT TIME ZONE $9)/30))::int AS slot FROM base),totals AS (SELECT slot,count(*) FILTER(WHERE event_type='refresh') AS appearances FROM bucketed GROUP BY slot) SELECT b.slot AS slot_index,to_char(make_time(b.slot/2,(b.slot%2)*30,0),'HH24:MI') AS slot_start,b.series,b.project,b.scene,count(*) FILTER(WHERE b.event_type='refresh') AS appearances,count(*) FILTER(WHERE b.event_type<>'refresh') AS samples,t.appearances AS total_appearances,COALESCE((count(*) FILTER(WHERE b.event_type='refresh'))::float8/NULLIF(t.appearances,0),0) AS appearance_rate FROM bucketed b JOIN totals t USING(slot) WHERE ($7='' OR b.project=$7) GROUP BY b.slot,b.series,b.project,b.scene,t.appearances ORDER BY b.slot,b.series,b.project,b.scene LIMIT 10001`, append(args, zone)...)
+		rows, err := tx.Query(r.Context(), filtered+`,bucketed AS (
+ SELECT *, (extract(hour FROM occurred_at AT TIME ZONE $9)*2+floor(extract(minute FROM occurred_at AT TIME ZONE $9)/30))::int AS slot FROM base
+), totals AS (
+ SELECT slot,series,focus_series,count(*) FILTER(WHERE event_type='refresh') AS appearances FROM bucketed GROUP BY slot,series,focus_series
+)
+SELECT b.slot AS slot_index,to_char(make_time(b.slot/2,(b.slot%2)*30,0),'HH24:MI') AS slot_start,
+ b.series,b.focus_series,b.project,b.scene,
+ count(*) FILTER(WHERE b.event_type='refresh') AS appearances,count(*) FILTER(WHERE b.event_type<>'refresh') AS samples,
+ t.appearances AS total_appearances,COALESCE((count(*) FILTER(WHERE b.event_type='refresh'))::float8/NULLIF(t.appearances,0),0) AS appearance_rate
+FROM bucketed b JOIN totals t USING(slot,series,focus_series) WHERE ($7='' OR b.project=$7)
+GROUP BY b.slot,b.series,b.focus_series,b.project,b.scene,t.appearances ORDER BY b.slot,b.series,b.focus_series,b.project,b.scene LIMIT 10001`, append(args, zone)...)
 		if err != nil {
 			internal(w, err)
 			return
@@ -115,7 +160,15 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 		output(w, 200, map[string]any{"schema_version": 2, "from": from, "to": to, "timezone": zone, "interval_minutes": 30, "slots": slots})
 		return
 	}
-	rows, e := tx.Query(r.Context(), filtered+`SELECT series,project,scene,count(*) FILTER(WHERE event_type='refresh') AS appearances,count(*) FILTER(WHERE event_type<>'refresh') AS samples,COALESCE(sum(duration_seconds) FILTER(WHERE event_type<>'refresh'),0)::bigint AS duration_seconds FROM filtered GROUP BY series,project,scene ORDER BY series,project,scene LIMIT 1001`, args...)
+	rows, e := tx.Query(r.Context(), filtered+`, totals AS (
+ SELECT series,focus_series,count(*) FILTER(WHERE event_type='refresh') AS appearances FROM base GROUP BY series,focus_series
+)
+SELECT e.series,e.focus_series,e.project,e.scene,count(*) FILTER(WHERE e.event_type='refresh') AS appearances,
+ count(*) FILTER(WHERE e.event_type<>'refresh') AS samples,
+ COALESCE(sum(e.duration_seconds) FILTER(WHERE e.event_type<>'refresh'),0)::bigint AS duration_seconds,
+ t.appearances AS total_appearances,COALESCE((count(*) FILTER(WHERE e.event_type='refresh'))::float8/NULLIF(t.appearances,0),0) AS appearance_rate
+FROM filtered e JOIN totals t USING(series,focus_series)
+GROUP BY e.series,e.focus_series,e.project,e.scene,t.appearances ORDER BY e.series,e.focus_series,e.project,e.scene LIMIT 1001`, args...)
 	if e != nil {
 		internal(w, e)
 		return
@@ -129,7 +182,17 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "QUERY_TOO_BROAD", "请缩小筛选范围")
 		return
 	}
-	rows, e = tx.Query(r.Context(), filtered+`, denominators AS (SELECT series,project,scene,count(*) AS samples,sum(duration_seconds) AS seconds,count(*) FILTER(WHERE duration_seconds>0) AS timed_samples FROM filtered WHERE event_type<>'refresh' GROUP BY series,project,scene) SELECT e.series,e.project,e.scene,i.item,i.tag,count(*) AS occurrences,sum(i.amount)::bigint AS amount,d.samples,d.timed_samples,round(sum(i.amount)::numeric/d.samples,6)::float8 AS average_per_sample,round(count(*)::numeric/d.samples,6)::float8 AS drop_rate,CASE WHEN d.seconds>0 THEN round(COALESCE(sum(i.amount) FILTER(WHERE e.duration_seconds>0),0)::numeric*3600/d.seconds,6)::float8 ELSE NULL END AS amount_per_hour FROM filtered e JOIN stat_items i ON i.sha256=e.sha256 AND i.ordinal=e.ordinal JOIN denominators d USING(series,project,scene) WHERE e.event_type<>'refresh' GROUP BY e.series,e.project,e.scene,i.item,i.tag,d.samples,d.seconds,d.timed_samples ORDER BY e.series,e.project,e.scene,i.item,i.tag LIMIT 1001`, args...)
+	rows, e = tx.Query(r.Context(), filtered+`, denominators AS (
+ SELECT series,focus_series,project,scene,count(*) AS samples,sum(duration_seconds) AS seconds,
+ count(*) FILTER(WHERE duration_seconds>0) AS timed_samples FROM filtered WHERE event_type<>'refresh' GROUP BY series,focus_series,project,scene
+)
+SELECT e.series,e.focus_series,e.project,e.scene,i.item,i.tag,count(*) AS occurrences,sum(i.amount)::bigint AS amount,
+ d.samples,d.timed_samples,round(sum(i.amount)::numeric/d.samples,6)::float8 AS average_per_sample,
+ round(count(*)::numeric/d.samples,6)::float8 AS drop_rate,
+ CASE WHEN d.seconds>0 THEN round(COALESCE(sum(i.amount) FILTER(WHERE e.duration_seconds>0),0)::numeric*3600/d.seconds,6)::float8 ELSE NULL END AS amount_per_hour
+FROM filtered e JOIN stat_items i ON i.sha256=e.sha256 AND i.ordinal=e.ordinal JOIN denominators d USING(series,focus_series,project,scene)
+WHERE e.event_type<>'refresh' GROUP BY e.series,e.focus_series,e.project,e.scene,i.item,i.tag,d.samples,d.seconds,d.timed_samples
+ORDER BY e.series,e.focus_series,e.project,e.scene,i.item,i.tag LIMIT 1001`, args...)
 	if e != nil {
 		internal(w, e)
 		return
@@ -143,7 +206,7 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "QUERY_TOO_BROAD", "请缩小筛选范围")
 		return
 	}
-	rows, e = tx.Query(r.Context(), filtered+`SELECT (occurred_at AT TIME ZONE 'UTC')::date::text AS day,count(*) FILTER(WHERE event_type<>'refresh') AS samples,count(*) FILTER(WHERE event_type='refresh') AS appearances FROM filtered GROUP BY day ORDER BY day`, args...)
+	rows, e = tx.Query(r.Context(), filtered+`SELECT (occurred_at AT TIME ZONE $9)::date::text AS day,count(*) FILTER(WHERE event_type<>'refresh') AS samples,count(*) FILTER(WHERE event_type='refresh') AS appearances FROM filtered GROUP BY day ORDER BY day`, append(args, zone)...)
 	if e != nil {
 		internal(w, e)
 		return
@@ -153,23 +216,11 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 		internal(w, e)
 		return
 	}
-	var appearances int64
-	if e = tx.QueryRow(r.Context(), filtered+`SELECT count(*) FROM base WHERE event_type='refresh'`, args...).Scan(&appearances); e != nil {
-		internal(w, e)
-		return
-	}
 	if e = tx.Commit(r.Context()); e != nil {
 		internal(w, e)
 		return
 	}
-	for _, g := range groups {
-		rate := 0.0
-		if appearances > 0 {
-			rate = float64(g["appearances"].(int64)) / float64(appearances)
-		}
-		g["appearance_rate"] = rate
-	}
-	output(w, 200, map[string]any{"schema_version": 2, "from": from, "to": to, "groups": groups, "items": items, "daily": daily})
+	output(w, 200, map[string]any{"schema_version": 2, "from": from, "to": to, "timezone": zone, "groups": groups, "items": items, "daily": daily})
 }
 
 // A candidate remains actionable only while a current result still reports it
