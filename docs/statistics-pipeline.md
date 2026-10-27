@@ -108,7 +108,7 @@ C 按组哈希事务串行：初版从 1 开始，更正必须是当前版本 +1
 - `GET /api/v2/get/research`
 - `GET /api/v2/get/drop`
 
-可选参数 `from / to` 为带时区 RFC3339，区间 `[from,to)`，默认最近 30 天，最大 366 天；只提供 `to` 时从该时刻回溯 30 天。支持 `server / scene / series / focus_series / project / timezone` 筛选；`focus_series=unknown` 可单独查询倾向未识别（存储值 0）的记录，省略则返回各倾向的独立分组。返回 `groups / items / daily / timezone`；每天按 `timezone` 分组，默认 `Asia/Shanghai`，可显式指定 `UTC`。查询返回当前有效版本，月度查询使用自然月起止时间，不会把历月重复累加。
+可选参数 `from / to` 为带时区 RFC3339，区间 `[from,to)`，默认最近 30 天，最大 366 天；只提供 `to` 时从该时刻回溯 30 天。支持 `server / scene / series / focus_series / project / timezone` 筛选；`focus_series=unknown` 可单独查询倾向未识别（存储值 0）的记录，省略则返回各倾向的独立分组。返回 `groups / items / daily / timezone`；每天按 `timezone` 分组，汇总接口默认 `UTC` 以保留原有契约，公开页面显式使用 `Asia/Shanghai`。查询返回当前有效版本，月度查询使用自然月起止时间，不会把历月重复累加。
 
 `GET /api/v2/get/research/options` 和 `/api/v2/get/drop/options` 返回实际有效数据的筛选维度：`options` 每行包含 `series / focus_series / scene / events / appearances / samples`。仅使用 `from / to / server` 限定发现范围，已选的期数、倾向、场景、项目不裁掉其他选项。只有正式统计事件提供选项，不硬编码科研期数或场景范围；区服或时间范围改变后，无效的选择回退到有数据的选项。
 
@@ -118,7 +118,9 @@ C 按组哈希事务串行：初版从 1 开始，更正必须是当前版本 +1
 
 `groups.appearance_rate` 为相同期数、相同倾向内的项目槽位占比，实际分母通过 `total_appearances` 返回，不受项目筛选影响；这不是项目在完整五槽位列表中至少出现一次的概率。`groups` 和 `items` 均保留 `focus_series`，同名项目跨期数、跨倾向分别统计。物品 `amount` 是总数量，`occurrences` 是出现该物品的完成事件数，`samples` 包含未掉该物品的完成事件，`drop_rate=occurrences/samples`，`average_per_sample=amount/samples`。掉落按场景、项目、期数、倾向和标签独立统计，委托样本不会进入大世界每日的分母。`amount_per_hour` 仅计算有时长的事件；无可用时长返回 null。物品标识来自模板名称，显示名称、物品所属期数与科研项目期数分别存储。
 
-本次查询变化不需要数据库迁移或重识别；前端新增依赖 `/options` 接口，部署时应与后端一起更新。依赖旧版跨期合并占比或 UTC 日汇总的 API 消费方，应改为读取期数、倾向分组，或显式传入 `timezone=UTC`。
+本次查询变化不需要数据库迁移或重识别；前端新增依赖 `/options` 接口，部署时应与后端一起更新。依赖旧版跨期合并占比的 API 消费方，应改为读取期数、倾向分组；原有默认 UTC 日汇总保持兼容。
+
+新增有效记录会累加到相同维度的统计中；新的期数和 `scene` 来源会自动成为可选项，未知来源名暂按原始标识展示。这里的自动发现指现有字段的新取值，新增 JSON 字段或未支持的奖励标签仍需更新协议。选择“全部区服”时按筛选意图合并区服；海域、侵蚀等级等仍保留在原始结果及旧版逐条查询中，本页面未增加这些维度的细分统计。宽查询超过 1000 个项目/物品分组或 10000 个时段/选项分组时返回 `QUERY_TOO_BROAD`，不会截断后冒充完整数据。
 
 ## 模板闭环与管理 API
 

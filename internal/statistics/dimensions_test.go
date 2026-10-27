@@ -83,8 +83,8 @@ func TestResearchDenominatorsSeparateSeriesAndFocus(t *testing.T) {
 	}
 	readDimensionQuery(t, s, "/api/v2/get/research?"+query.Encode(), &summary)
 	expect(summary.Groups)
-	if len(summary.Daily) != 1 || summary.Daily[0].Day != "2026-09-11" {
-		t.Fatal("daily data did not use the default Shanghai timezone", summary.Daily)
+	if len(summary.Daily) != 1 || summary.Daily[0].Day != "2026-09-10" {
+		t.Fatal("daily data did not preserve the default UTC timezone", summary.Daily)
 	}
 	var slots struct {
 		Slots []row `json:"slots"`
@@ -97,6 +97,11 @@ func TestResearchDenominatorsSeparateSeriesAndFocus(t *testing.T) {
 		t.Fatal("unknown focus merged with recognized focuses", summary.Groups)
 	}
 	query.Del("focus_series")
+	query.Set("timezone", "Asia/Shanghai")
+	readDimensionQuery(t, s, "/api/v2/get/research?"+query.Encode(), &summary)
+	if summary.Daily[0].Day != "2026-09-11" {
+		t.Fatal("explicit Shanghai timezone ignored", summary.Daily)
+	}
 	query.Set("timezone", "UTC")
 	readDimensionQuery(t, s, "/api/v2/get/research?"+query.Encode(), &summary)
 	if summary.Daily[0].Day != "2026-09-10" {
@@ -220,5 +225,101 @@ func TestSummaryDefaultFromFollowsExplicitTo(t *testing.T) {
 	readDimensionQuery(t, s, "/api/v2/get/research?to=2026-01-01T00:00:00Z", &reply)
 	if reply.To.Sub(reply.From) != 30*24*time.Hour {
 		t.Fatal("default range did not follow explicit to", reply)
+	}
+}
+
+func TestNewDataRemainsInItsOwnDimensions(t *testing.T) {
+	s := service(t)
+	ctx := context.Background()
+	query := url.Values{"from": {"2026-09-17T00:00:00Z"}, "to": {"2026-09-18T00:00:00Z"}, "server": {"jp"}}
+	makeDrop := func(scene string, count, amount int) Result {
+		t.Helper()
+		r := fixture(t)
+		r.Source.Metadata.Server = "jp"
+		r.Source.Metadata.Scene = scene
+		r.Source.Metadata.CollectedAt = "2026-09-17T08:00:00Z"
+		r.Events = nil
+		for range count {
+			r.Events = append(r.Events, Event{Type: "drop", Items: []Item{{Item: "Coins", Amount: int64(amount)}}})
+		}
+		return r
+	}
+	applyDimensionResult(t, s, makeDrop("commission", 2, 5))
+	applyDimensionResult(t, s, makeDrop("opsi_daily", 1, 90))
+	expectSources := func(want map[string][2]int) {
+		t.Helper()
+		var summary struct {
+			Items []struct {
+				Scene   string `json:"scene"`
+				Samples int    `json:"samples"`
+				Amount  int    `json:"amount"`
+			} `json:"items"`
+		}
+		readDimensionQuery(t, s, "/api/v2/get/drop?"+query.Encode(), &summary)
+		if len(summary.Items) != len(want) {
+			t.Fatal("new source was merged or an old source disappeared", summary.Items)
+		}
+		for _, item := range summary.Items {
+			if actual := [2]int{item.Samples, item.Amount}; want[item.Scene] != actual {
+				t.Fatalf("source %q: got %v, want %v", item.Scene, actual, want[item.Scene])
+			}
+		}
+		var options struct {
+			Options []struct {
+				Scene string `json:"scene"`
+			} `json:"options"`
+		}
+		readDimensionQuery(t, s, "/api/v2/get/drop/options?"+query.Encode(), &options)
+		if len(options.Options) != len(want) {
+			t.Fatal("new source did not become an available option", options.Options)
+		}
+		for _, option := range options.Options {
+			if _, ok := want[option.Scene]; !ok {
+				t.Fatal("unexpected source option", option.Scene)
+			}
+		}
+	}
+	expectSources(map[string][2]int{"commission": {2, 10}, "opsi_daily": {1, 90}})
+	added := makeDrop("commission", 50, 3)
+	applyDimensionResult(t, s, added)
+	applyDimensionResult(t, s, makeDrop("opsi_future_mode", 3, 2))
+	expectSources(map[string][2]int{"commission": {52, 160}, "opsi_daily": {1, 90}, "opsi_future_mode": {3, 6}})
+	ack, err := s.Apply(ctx, added)
+	if err != nil || ack.Status != "duplicate" {
+		t.Fatal("retransmission was not deduplicated", ack, err)
+	}
+	expectSources(map[string][2]int{"commission": {52, 160}, "opsi_daily": {1, 90}, "opsi_future_mode": {3, 6}})
+	// Correcting a source must remove its old contribution before adding the new one.
+	added.Revision++
+	added.Source.Metadata.Scene = "opsi_future_mode"
+	applyDimensionResult(t, s, added)
+	expectSources(map[string][2]int{"commission": {2, 10}, "opsi_daily": {1, 90}, "opsi_future_mode": {53, 156}})
+
+	for _, series := range []int{9, 13} {
+		r := makeDrop("research_refresh", 1, 1)
+		r.Source.Metadata.Project = "research"
+		r.Events = []Event{{Type: "refresh", Series: series, FocusSeries: 9, Project: "Q-A"}}
+		applyDimensionResult(t, s, r)
+	}
+	var periods struct {
+		Options []struct {
+			Series int `json:"series"`
+		} `json:"options"`
+	}
+	readDimensionQuery(t, s, "/api/v2/get/research/options?"+query.Encode(), &periods)
+	if len(periods.Options) != 2 || periods.Options[0].Series != 13 || periods.Options[1].Series != 9 {
+		t.Fatal("new research period was not discovered independently", periods.Options)
+	}
+	var research struct {
+		Groups []struct {
+			Series      int `json:"series"`
+			Appearances int `json:"appearances"`
+			Total       int `json:"total_appearances"`
+		} `json:"groups"`
+	}
+	query.Set("series", "9")
+	readDimensionQuery(t, s, "/api/v2/get/research?"+query.Encode(), &research)
+	if len(research.Groups) != 1 || research.Groups[0].Series != 9 || research.Groups[0].Appearances != 1 || research.Groups[0].Total != 1 {
+		t.Fatal("new period changed the existing period", research.Groups)
 	}
 }

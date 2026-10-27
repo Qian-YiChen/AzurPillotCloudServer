@@ -73,7 +73,12 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 	}
 	zone := q.Get("timezone")
 	if zone == "" {
-		zone = "Asia/Shanghai"
+		// Preserve the existing UTC daily-summary contract. The public UI sends
+		// Asia/Shanghai explicitly; half-hour queries retain their own default.
+		zone = "UTC"
+		if strings.HasSuffix(r.URL.Path, "/time-slots") {
+			zone = "Asia/Shanghai"
+		}
 	}
 	if _, e = time.LoadLocation(zone); e != nil {
 		fail(w, 400, "VALIDATION_ERROR", "无效时区")
