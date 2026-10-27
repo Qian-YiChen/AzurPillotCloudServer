@@ -1,15 +1,13 @@
 package httpapi
 
 import (
-	"errors"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"strconv"
 )
 
-// Expose A's resumable protocol at the common API origin. ReverseProxy streams
-// each file directly to A; C neither buffers the complete body nor stores images.
+// Discover A at the common API origin without requiring a network route from C
+// to A. A 307 preserves the upload method and body for clients following it.
 func (s *Server) handleUploadGateway(w http.ResponseWriter, r *http.Request) {
 	if id := r.PathValue("id"); id != "" && !uuidPattern.MatchString(id) {
 		writeError(w, r, errValidation("upload_id 必须是 UUID", "upload_id"))
@@ -36,24 +34,7 @@ func (s *Server) handleUploadGateway(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, errServiceUnavailable())
 		return
 	}
-	target := &url.URL{Scheme: u.Scheme, Host: u.Host}
-	r.Body = http.MaxBytesReader(w, r.Body, limit)
-	proxy := &httputil.ReverseProxy{
-		Rewrite: func(p *httputil.ProxyRequest) {
-			p.SetURL(target)
-			p.SetXForwarded()
-			p.Out.Header.Del("Authorization")
-			p.Out.Header.Del("Cookie")
-		},
-		FlushInterval: -1,
-		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			var size *http.MaxBytesError
-			if errors.As(err, &size) {
-				writeError(w, r, apiError{413, "PAYLOAD_TOO_LARGE", "上传请求超限", map[string]any{}})
-			} else {
-				writeError(w, r, errSourceUnavailable())
-			}
-		},
-	}
-	proxy.ServeHTTP(w, r)
+	target := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: r.URL.Path, RawQuery: r.URL.RawQuery}
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, target.String(), http.StatusTemporaryRedirect)
 }

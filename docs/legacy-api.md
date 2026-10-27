@@ -40,6 +40,6 @@ CL1 每设备、实例、月份只保留一份累计快照；无采集时间的�
 
 新版 AP 使用 `/api/v2/post/cl1`、`/api/v2/get/server`、`/api/v2/get/maintenance` 与两个 Worker JSON 文档。旧版路径仅为历史客户端保留。
 
-截图使用同一 HTTPS 域名下 `POST /api/v1/uploads/init`、`PUT /api/v1/uploads/{id}/files/{index}`、`POST /api/v1/uploads/{id}/complete`。C 将这些指定路由流式转发 A，清除管理凭据和 Cookie，不在 C 落盘图片。每个请求最多一个 10 MiB 文件，仍由 A 执行配额和哈希去重。
+截图入口为 `POST /api/v1/uploads/init`，C 返回 **307** 和 A 的公网地址（当前为 `http://160.202.238.171:30207`）。AP 解析该地址后，将登记、逐文件 `PUT /api/v1/uploads/{id}/files/{index}` 和 `POST /api/v1/uploads/{id}/complete` 直接发送给 A。C 不连接 A，也不转发图片正文；每个文件最多 10 MiB，由 A 执行暂存配额和哈希去重。A 与 B 沿用现有连接，B 将识别结果提交 C。
 
 国服维护来自官方页面使用的 `api.biligame.com/news/list`（`gameExtensionId=103`、`positionId=2`）及详情接口。严格解析维护段落的北京时间与结束时间/明确时长，已结束计划不下发，不推算下次维护；失败保留上次成功结果并记录诊断。其他区服不复用国服公告。

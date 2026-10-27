@@ -12,6 +12,8 @@
 
 123 盘保存长期原图。A 云盘上传完成即删除本地副本；B 在处理结束/失败后删除工作图片，重试重新下载；C 不保存完整截图。A 每 30 分钟派发，模板重跑和试识别不受此调度限制。
 
+AP 先请求 `https://api.azurpilot.com/api/v1/uploads/init`，C 返回 307 指向 A 的公网入口。AP 随后直接向 A 登记、上传文件和完成图片组；图片正文不经过 C。A 与 B 通过现有 WebSocket 交换任务，B 将识别结果提交 C，因此 A、C 不需要彼此连通。
+
 ## 配置与部署顺序
 
 对外 API 统一使用 `https://api.azurpilot.com`，管理后台继续使用 `https://stats.azurpilot.com/admin/`。A 的 `STATISTICS_PUBLIC_URL` 和 B 的 `STATISTICS_URL` 指向统一 API 域名。新旧域名共享 C 服务和数据库；B 的预览入口仍由 `RECOGNIZER_URL` 单独配置。
