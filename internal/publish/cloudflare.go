@@ -48,10 +48,11 @@ type AssetFile struct {
 	ContentType string
 }
 
-// assetHash 计算 Cloudflare 资产哈希：内容 SHA-256 的十六进制。
+// Cloudflare Direct Upload requires exactly 32 hexadecimal characters.
+// Use the first 128 bits of SHA-256 consistently for manifest and file parts.
 func assetHash(content []byte) string {
 	sum := sha256.Sum256(content)
-	return hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:16])
 }
 
 type cfResponse struct {
@@ -279,14 +280,14 @@ func (c *Client) deployWorker(ctx context.Context, scriptName string, mainModule
 	if err != nil {
 		return err
 	}
-	metaPart, err := form.CreateFormFile("metadata", "metadata.json")
+	metaPart, err := typedFormFile(form, "metadata", "metadata.json", "application/json")
 	if err != nil {
 		return err
 	}
 	if _, err := metaPart.Write(metaJSON); err != nil {
 		return err
 	}
-	modulePart, err := form.CreateFormFile("main.js", "main.js")
+	modulePart, err := typedFormFile(form, "main.js", "main.js", "application/javascript+module")
 	if err != nil {
 		return err
 	}
@@ -303,4 +304,11 @@ func (c *Client) deployWorker(ctx context.Context, scriptName string, mainModule
 		return fmt.Errorf("部署 Worker 失败: %w", err)
 	}
 	return nil
+}
+
+func typedFormFile(form *multipart.Writer, name, filename, contentType string) (io.Writer, error) {
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, name, filename))
+	header.Set("Content-Type", contentType)
+	return form.CreatePart(header)
 }

@@ -2,7 +2,10 @@ package publish
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -45,6 +48,14 @@ func (m *mockCF) handler(t *testing.T) http.Handler {
 			if err := jsonUnmarshal(body, &req); err != nil {
 				t.Errorf("manifest 解析失败: %v", err)
 			}
+			for _, entry := range req.Manifest {
+				hash, err := hex.DecodeString(entry.Hash)
+				if err != nil || len(hash) != 16 {
+					w.WriteHeader(http.StatusBadRequest)
+					_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":10304,"message":"Invalid manifest hash size"}]}`))
+					return
+				}
+			}
 			m.mu.Lock()
 			m.manifest = req.Manifest
 			m.mu.Unlock()
@@ -67,20 +78,26 @@ func (m *mockCF) handler(t *testing.T) http.Handler {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			metaFile, _, err := r.FormFile("metadata")
+			metaFile, metaHeader, err := r.FormFile("metadata")
 			if err != nil {
 				t.Errorf("部署缺少 metadata: %v", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			if metaHeader.Header.Get("Content-Type") != "application/json" {
+				t.Error("metadata 必须标记为 application/json")
+			}
 			metaRaw, _ := io.ReadAll(metaFile)
 			_ = metaFile.Close()
 			meta := string(metaRaw)
-			file, _, err := r.FormFile("main.js")
+			file, moduleHeader, err := r.FormFile("main.js")
 			if err != nil {
 				t.Errorf("部署缺少 main.js: %v", err)
 				w.WriteHeader(http.StatusBadRequest)
 				return
+			}
+			if moduleHeader.Header.Get("Content-Type") != "application/javascript+module" {
+				t.Error("ES module 必须标记正确 Content-Type")
 			}
 			defer func() { _ = file.Close() }()
 			main, _ := io.ReadAll(file)
@@ -96,13 +113,28 @@ func (m *mockCF) handler(t *testing.T) http.Handler {
 }
 
 func (m *mockCF) parseUpload(r *http.Request) error {
+	if r.URL.Query().Get("base64") != "true" {
+		return fmt.Errorf("missing base64 upload flag")
+	}
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		return err
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.uploaded == nil {
 		m.uploaded = map[string][]byte{}
 	}
-	for _, headers := range r.MultipartForm.File {
+	for hash, headers := range r.MultipartForm.File {
+		var expected *manifestEntry
+		for _, entry := range m.manifest {
+			if entry.Hash == hash {
+				expected = &entry
+				break
+			}
+		}
+		if expected == nil {
+			return fmt.Errorf("upload field does not match requested hash")
+		}
 		for _, fh := range headers {
 			rc, err := fh.Open()
 			if err != nil {
@@ -113,17 +145,19 @@ func (m *mockCF) parseUpload(r *http.Request) error {
 			if err != nil {
 				return err
 			}
-			// 文件内容按规范是 base64 编码；这里直接存原始内容不还原，
-			// 仅验证哈希键与内容存在性。
-			m.uploaded[fh.Filename] = raw
+			decoded, err := base64.StdEncoding.DecodeString(string(raw))
+			if err != nil || len(decoded) != expected.Size {
+				return fmt.Errorf("invalid base64 asset or size")
+			}
+			m.uploaded[hash] = decoded
 		}
 	}
 	return nil
 }
 
 func hashOf(manifest map[string]manifestEntry) string {
-	for hash := range manifest {
-		return hash
+	for _, entry := range manifest {
+		return entry.Hash
 	}
 	return ""
 }
@@ -158,6 +192,9 @@ func TestClientPublishWorkerFullFlow(t *testing.T) {
 	}
 	if len(m.uploaded) != 1 {
 		t.Fatalf("应上传 1 个文件: %d", len(m.uploaded))
+	}
+	if string(m.uploaded[entry.Hash]) != string(content) {
+		t.Fatal("uploaded asset content differs from manifest source")
 	}
 	if !strings.Contains(m.deployMeta, `"jwt":"completion-jwt"`) ||
 		!strings.Contains(m.deployMeta, `"main_module":"main.js"`) {
