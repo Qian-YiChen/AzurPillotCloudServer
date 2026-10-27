@@ -103,14 +103,14 @@ C 按组哈希事务串行：初版从 1 开始，更正必须是当前版本 +1
 
 ## 统计查询
 
-公开网站为 `https://stats.azurpilot.com/`，提供科研项目分布、48 个半小时时段出现占比和来源掉落明细。科研默认展示当前时间范围、区服内有记录的最新一期，通过期数按钮切换；项目出现和完成记录分别展示。刷新科研倾向只筛选项目出现与半小时图，完成截图缺失倾向的记录仍保留在本期完成统计中，不同倾向的完成奖励分别列行。通用掉落通过来源按钮分别查看 `commission`、`opsi_daily` 及其他大世界来源，默认优先展示 `opsi_daily`，其余来源不会混入当前样本量或掉落率。筛选和页面链接可保存当前期数、倾向或来源。公开页面只调用公开查询 API，不读取管理 Token。管理后台的“公开统计网站”链接可直接进入。
+公开网站为 `https://stats.azurpilot.com/`，提供科研项目分布、48 个半小时时段出现占比和来源掉落明细。保留原有页签按钮、筛选栏、下拉选择、场景输入框及表格样式，通过“应用筛选”查询。科研默认显示“全部期数”和“全部倾向（含未识别）”，也可在原有下拉框中指定期数、倾向。选择全部时，同名项目按期数、倾向分别列行，半小时图也使用对比项目对应期数、倾向的独立分母。科研项目表保留原有列；指定刷新倾向时，出现次数和占比采用该倾向，完成记录保留原有按项目期数汇总的口径；完成奖励在掉落明细中按倾向分别列行。通用掉落场景留空时显示全部来源，也可输入 `commission`、`opsi_daily` 及其他来源进行筛选，各来源的掉落率和单次均量仍分别计算；候选项来自实际数据。筛选和页面链接可保存当前期数、倾向或来源。公开页面只调用公开查询 API，不读取管理 Token。管理后台的“公开统计网站”链接可直接进入。
 
 - `GET /api/v2/get/research`
 - `GET /api/v2/get/drop`
 
 可选参数 `from / to` 为带时区 RFC3339，区间 `[from,to)`，默认最近 30 天，最大 366 天；只提供 `to` 时从该时刻回溯 30 天。支持 `server / scene / series / focus_series / project / timezone` 筛选；`focus_series=unknown` 可单独查询倾向未识别（存储值 0）的记录，省略则返回各倾向的独立分组。返回 `groups / items / daily / timezone`；每天按 `timezone` 分组，汇总接口默认 `UTC` 以保留原有契约，公开页面显式使用 `Asia/Shanghai`。查询返回当前有效版本，月度查询使用自然月起止时间，不会把历月重复累加。
 
-`GET /api/v2/get/research/options` 和 `/api/v2/get/drop/options` 返回实际有效数据的筛选维度：`options` 每行包含 `series / focus_series / scene / events / appearances / samples`。仅使用 `from / to / server` 限定发现范围，已选的期数、倾向、场景、项目不裁掉其他选项。只有正式统计事件提供选项，不硬编码科研期数或场景范围；区服或时间范围改变后，无效的选择回退到有数据的选项。
+`GET /api/v2/get/research/options` 和 `/api/v2/get/drop/options` 返回实际有效数据的筛选维度：`options` 每行包含 `series / focus_series / scene / events / appearances / samples`。仅使用 `from / to / server` 限定发现范围，已选的期数、倾向、场景、项目不裁掉其他选项。只有正式统计事件提供选项，不硬编码科研期数或场景范围；空筛选保留“全部”的含义，不自动改成最新期数、倾向或某个掉落来源。
 
 `GET /api/v2/get/research/time-slots`（通用掉落对应 `/api/v2/get/drop/time-slots`）按一天内的 48 个半小时时段汇总，默认 `timezone=Asia/Shanghai`，支持 IANA 时区和同样的筛选。返回 `slots`，含 `slot_index / slot_start / series / focus_series / project / scene / appearances / samples / total_appearances / appearance_rate`。科研期内出现占比 = 当前项目在该时段的出现次数 ÷ 该时段相同期数、相同科研倾向且符合区服、场景筛选的全部出现次数；即使不指定期数或倾向，分母也分别计算。筛选项目只裁剪返回行，不缩小分母。空时段省略，不代表出现概率为零。通用掉落不产生科研刷新观测，其 `appearance_rate` 无科研出现率意义，掉落率应使用汇总接口的 `items.drop_rate`。
 
