@@ -172,6 +172,21 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 	output(w, 200, map[string]any{"schema_version": 2, "from": from, "to": to, "groups": groups, "items": items, "daily": daily})
 }
 
+// A candidate remains actionable only while a current result still reports it
+// missing. Sources received just before their first result also remain visible.
+// This is derived from the latest result, so rollback can reopen a candidate.
+const candidateReviewCTE = `WITH candidate_review AS (
+ SELECT c.*, (SELECT count(DISTINCT cs.sample_sha256) FROM candidate_sources cs
+ LEFT JOIN stat_results r ON r.sha256=cs.sample_sha256
+ WHERE cs.candidate_id=c.id AND (r.sha256 IS NULL OR
+ (r.status='needs_review' AND (r.payload->'candidate_ids') ? c.id))) AS blocked_samples
+ FROM template_candidates c
+), candidates AS (
+ SELECT id,scene,image,metadata,first_seen,last_seen,blocked_samples,
+ CASE WHEN status='pending' AND blocked_samples=0 THEN 'resolved' ELSE status END AS status
+ FROM candidate_review
+) `
+
 func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	if strings.HasSuffix(path, "overview") {
@@ -187,7 +202,7 @@ func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 			images[name] = files
 		}
 		var pending int64
-		if e := s.Pool.QueryRow(r.Context(), `SELECT count(*) FROM template_candidates WHERE status='pending'`).Scan(&pending); e != nil {
+		if e := s.Pool.QueryRow(r.Context(), candidateReviewCTE+`SELECT count(*) FROM candidates WHERE status='pending'`).Scan(&pending); e != nil {
 			internal(w, e)
 			return
 		}
@@ -206,7 +221,7 @@ func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 	}
 	queries := map[string]string{
 		"results":             `SELECT sha256,revision,status,payload,updated_at FROM stat_results WHERE ($1='' OR status=$1) ORDER BY updated_at DESC LIMIT 100`,
-		"template-candidates": `SELECT c.*, (SELECT count(*) FROM candidate_sources cs WHERE cs.candidate_id=c.id) AS occurrences, (SELECT count(DISTINCT sample_sha256) FROM candidate_sources cs WHERE cs.candidate_id=c.id) AS blocked_samples, (SELECT jsonb_agg(metadata||jsonb_build_object('sample_sha256',sample_sha256,'occurrence',occurrence)) FROM (SELECT * FROM candidate_sources WHERE candidate_id=c.id LIMIT 20) x) AS sources FROM template_candidates c WHERE ($1='' OR status=$1) ORDER BY last_seen DESC LIMIT 100`,
+		"template-candidates": candidateReviewCTE + `SELECT c.*, (SELECT count(*) FROM candidate_sources cs WHERE cs.candidate_id=c.id) AS occurrences, (SELECT jsonb_agg(metadata||jsonb_build_object('sample_sha256',sample_sha256,'occurrence',occurrence)) FROM (SELECT * FROM candidate_sources WHERE candidate_id=c.id LIMIT 20) x) AS sources FROM candidates c WHERE ($1='' OR status=$1) ORDER BY last_seen DESC LIMIT 100`,
 		"templates":           `SELECT id,item_id,name,category,rarity,series,scene,enabled,image FROM stat_templates WHERE ($1='' OR item_id=$1) ORDER BY item_id,id LIMIT 1000`,
 		"template-releases":   `SELECT id,sha256,created_at,id=(SELECT release_id FROM template_active WHERE id) AS active FROM template_releases WHERE ($1='') ORDER BY id DESC LIMIT 30`,
 		"worker-commands":     `SELECT * FROM worker_commands WHERE ($1='' OR state=$1) ORDER BY id DESC LIMIT 30`,

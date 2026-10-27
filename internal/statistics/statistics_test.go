@@ -344,6 +344,83 @@ func TestCandidateClassificationPublicationAndRollback(t *testing.T) {
 }
 func jsonNumber(n int64) string { b, _ := json.Marshal(n); return string(b) }
 
+func TestCandidateAutomaticallyResolvesAndReopens(t *testing.T) {
+	s := service(t)
+	ctx := context.Background()
+	var data bytes.Buffer
+	if e := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 16, 16))); e != nil {
+		t.Fatal(e)
+	}
+	digest := sha256.Sum256(data.Bytes())
+	id := hex.EncodeToString(digest[:])
+	r1, r2 := fixture(t), fixture(t)
+	for _, result := range []*Result{&r1, &r2} {
+		result.Status = "needs_review"
+		result.Candidates = []string{id}
+		result.Diagnostics = []string{"missing_template:" + id}
+		if _, e := s.Apply(ctx, *result); e != nil {
+			t.Fatal(e)
+		}
+		candidate := Candidate{ID: id, Scene: "drop", Image: base64.StdEncoding.EncodeToString(data.Bytes()), Sample: result.SHA256, Occurrence: "0:0:0", Metadata: map[string]any{}}
+		if rec := call(t, s, "POST", "/internal/v1/template-candidates", "worker-token", candidate); rec.Code != 200 {
+			t.Fatal(rec.Body.String())
+		}
+	}
+	expect := func(status string, blocked int64) {
+		t.Helper()
+		rec := call(t, s, "GET", "/api/v1/admin/template-candidates?status="+status, "admin-token", nil)
+		var reply struct {
+			Items []struct {
+				ID      string `json:"id"`
+				Status  string `json:"status"`
+				Blocked int64  `json:"blocked_samples"`
+			} `json:"items"`
+		}
+		if e := json.Unmarshal(rec.Body.Bytes(), &reply); e != nil || rec.Code != 200 {
+			t.Fatal(rec.Body.String(), e)
+		}
+		for _, candidate := range reply.Items {
+			if candidate.ID == id {
+				if candidate.Status != status || candidate.Blocked != blocked {
+					t.Fatal(candidate)
+				}
+				return
+			}
+		}
+		t.Fatalf("candidate missing from %s", status)
+	}
+	expect("pending", 2)
+	r1.Revision++
+	r1.Status = "complete"
+	r1.Candidates = nil
+	r1.Diagnostics = nil
+	if _, e := s.Apply(ctx, r1); e != nil {
+		t.Fatal(e)
+	}
+	expect("pending", 1)
+	// The icon is fixed even though a different project error still needs review.
+	r2.Revision++
+	r2.Candidates = nil
+	r2.Diagnostics = []string{"unknown_project"}
+	if _, e := s.Apply(ctx, r2); e != nil {
+		t.Fatal(e)
+	}
+	expect("resolved", 0)
+	rec := call(t, s, "GET", "/api/v1/admin/template-candidates?status=pending", "admin-token", nil)
+	if strings.Contains(rec.Body.String(), id) {
+		t.Fatal("resolved candidate still occupies pending list")
+	}
+	// A later rollback can make the exact icon unknown again.
+	r1.Revision++
+	r1.Status = "needs_review"
+	r1.Candidates = []string{id}
+	r1.Diagnostics = []string{"missing_template:" + id}
+	if _, e := s.Apply(ctx, r1); e != nil {
+		t.Fatal(e)
+	}
+	expect("pending", 1)
+}
+
 func TestReprocessUnresolvedMergesConcurrentClicks(t *testing.T) {
 	s := service(t)
 	unresolved := fixture(t)
