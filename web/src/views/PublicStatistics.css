@@ -30,6 +30,12 @@
 .public-section-head h2 { font-size: 18px; }
 .public-section-head label { width: min(260px, 100%); }
 .public-note, .public-footnote { font-size: 12px; color: var(--text-dim); margin: 0 0 16px; }
+.public-dimension-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.public-dimension-tabs button { min-height: 38px; text-align: left; }
+.public-dimension-tabs button.selected { color: var(--link); background: var(--accent-soft); border-color: var(--accent); }
+.public-dimension-tabs button span { display: block; font-size: 11px; font-weight: 400; color: var(--text-dim); margin-top: 4px; }
+.public-scope { margin: 16px 0 0; font-size: 12px; color: var(--text-dim); line-height: 1.8; }
+.public-scope strong { color: var(--text); font-weight: 500; }
 .public-footnote { margin: 32px 0 0; }
 .slot-card { position: relative; }
 .slot-readout { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; min-height: 44px; font-size: 12px; color: var(--text-dim); }
@@ -43,9 +49,14 @@
 .slot-column:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .slot-missing .slot-bar { background: var(--border-strong); }
 .slot-label { position: absolute; top: calc(100% + 8px); left: 0; font-size: 10px; color: var(--text-dim); font-weight: 400; white-space: nowrap; }
-.public-table { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.public-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.public-table th, .public-table td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.public-table th:first-child, .public-table td:first-child { padding-left: 0; }
+.public-table th:last-child, .public-table td:last-child { padding-right: 0; }
+.public-table tbody tr:last-child td { border-bottom: 0; }
+.public-table tbody tr:hover { background: var(--canvas); }
 .public-table th { font-size: 12px; font-weight: 400; color: var(--text-dim); }
-.public-table td { font-size: 13px; padding-top: 16px; padding-bottom: 16px; }
+.public-table td { font-size: 13px; }
 .public-table td strong { font-weight: 500; }
 .public-cell-note { display: block; font-size: 11px; color: var(--text-dim); margin-top: 4px; }
 .public-rate { width: 56px; height: 4px; display: inline-block; background: var(--accent-soft); vertical-align: middle; margin-right: 12px; border-radius: 2px; overflow: hidden; }
