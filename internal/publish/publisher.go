@@ -206,6 +206,36 @@ func (p *Publisher) publish(ctx context.Context, worker string, job Job) Result 
 
 // verifyReadBack 从公网地址拉取文件并逐字节比对。
 func verifyReadBack(ctx context.Context, url string, want []byte) error {
+	return verifyReadBackWithRetry(ctx, url, want, time.Second)
+}
+
+// An upload is deployed before every edge necessarily serves its new assets.
+// Retry within the publication context, never report stale content as success.
+func verifyReadBackWithRetry(ctx context.Context, url string, want []byte, delay time.Duration) error {
+	var last error
+	for attempt := 0; attempt < 6; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(err, last)
+		}
+		last = readBackOnce(ctx, url, want)
+		if last == nil {
+			return nil
+		}
+		if attempt == 5 {
+			return last
+		}
+		timer := time.NewTimer(delay << attempt)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errors.Join(ctx.Err(), last)
+		case <-timer.C:
+		}
+	}
+	return last
+}
+
+func readBackOnce(ctx context.Context, url string, want []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err

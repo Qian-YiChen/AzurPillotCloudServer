@@ -318,7 +318,7 @@ func TestPublisherReadBackMismatch(t *testing.T) {
 		LocalPath: noticePath,
 		Content:   content,
 		PublicURL: public.URL,
-	}, 10*time.Second)
+	}, 500*time.Millisecond)
 	if res.Success || !strings.Contains(res.Error, "读取确认") {
 		t.Fatalf("读取确认失败应记录错误: %+v", res)
 	}

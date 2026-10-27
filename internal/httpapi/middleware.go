@@ -174,9 +174,16 @@ func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 }
 
 // timeoutMiddleware 为每个请求设置处理超时。
-func timeoutMiddleware(d time.Duration, next http.Handler) http.Handler {
+func timeoutMiddleware(d, publishTimeout time.Duration, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		timeout := d
+		publishing := (r.URL.Path == "/api/v1/admin/announcement" && (r.Method == http.MethodPut || r.Method == http.MethodDelete)) || (r.URL.Path == "/api/v1/admin/update-policy" && r.Method == http.MethodPut)
+		if publishing {
+			timeout = publishTimeout + 5*time.Second
+			controller := http.NewResponseController(w)
+			_ = controller.SetWriteDeadline(time.Now().Add(timeout))
+			defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/admin/statistics/preview/") {
 			timeout = 50 * time.Second
 		}
