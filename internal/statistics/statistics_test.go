@@ -382,6 +382,16 @@ func TestReprocessUnresolvedMergesConcurrentClicks(t *testing.T) {
 		}
 	}
 	// Count original files and submissions separately without breaking old clients.
+	// A new release must get its own retry even when an older command is still
+	// pending on C but has already been received by B.
+	if rec := call(t, s, "POST", "/api/v1/admin/templates/publish", "admin-token", nil); rec.Code != 200 {
+		t.Fatal(rec.Body.String())
+	}
+	var versions int
+	if e := s.Pool.QueryRow(context.Background(), `SELECT count(*) FROM worker_commands WHERE action='reprocess' AND payload->'sources' @> $1::jsonb`, "[{\"sha256\":\""+unresolved.SHA256+"\"}]").Scan(&versions); e != nil || versions != 2 {
+		t.Fatal("new release was incorrectly merged with an older command", versions, e)
+	}
+	// Count original files and submissions separately without breaking old clients.
 	rec := call(t, s, "GET", "/api/v1/admin/statistics/overview", "admin-token", nil)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"image_counts"`) || !strings.Contains(rec.Body.String(), `"counts"`) {
 		t.Fatal(rec.Body.String())

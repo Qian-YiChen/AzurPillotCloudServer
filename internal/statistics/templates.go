@@ -229,7 +229,18 @@ func releaseInTx(ctx context.Context, tx pgx.Tx, payload []byte) (int64, int64, 
 }
 
 func queueUnresolved(ctx context.Context, tx pgx.Tx, includeManaged bool) (int64, error) {
-	queued, e := tx.Exec(ctx, `INSERT INTO worker_commands(action,payload) SELECT 'reprocess',jsonb_build_object('sources',jsonb_build_array(r.payload->'source'),'templates','[]'::jsonb) FROM stat_results r WHERE (status='needs_review' OR ($1 AND CASE WHEN jsonb_typeof(r.payload->'used_templates')='array' THEN jsonb_array_length(r.payload->'used_templates') ELSE 0 END>0)) AND NOT EXISTS (SELECT 1 FROM worker_commands c WHERE c.action='reprocess' AND c.state='pending' AND c.payload->'sources' @> jsonb_build_array(r.payload->'source'))`, includeManaged)
+	var release *int64
+	if e := tx.QueryRow(ctx, `SELECT release_id FROM template_active WHERE id`).Scan(&release); e != nil {
+		return 0, e
+	}
+	var version int64
+	if release != nil {
+		version = *release
+	}
+	// A worker may already have fetched a command still marked pending on C.
+	// Never merge a new publication into that older command: its local ID is
+	// idempotent and it may already have run with the previous templates.
+	queued, e := tx.Exec(ctx, `INSERT INTO worker_commands(action,payload) SELECT 'reprocess',jsonb_build_object('sources',jsonb_build_array(r.payload->'source'),'templates','[]'::jsonb,'template_release',$2::bigint) FROM stat_results r WHERE (status='needs_review' OR ($1 AND CASE WHEN jsonb_typeof(r.payload->'used_templates')='array' THEN jsonb_array_length(r.payload->'used_templates') ELSE 0 END>0)) AND NOT EXISTS (SELECT 1 FROM worker_commands c WHERE c.action='reprocess' AND c.state='pending' AND COALESCE((c.payload->>'template_release')::bigint,0)=$2 AND c.payload->'sources' @> jsonb_build_array(r.payload->'source'))`, includeManaged, version)
 	return queued.RowsAffected(), e
 }
 
@@ -415,17 +426,28 @@ func (s *Service) syncWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var release *int64
-	if e := s.Pool.QueryRow(r.Context(), `SELECT release_id FROM template_active WHERE id`).Scan(&release); e != nil {
+	// Fetch the active version and commands from one publication snapshot.
+	tx, e := s.Pool.BeginTx(r.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if e != nil {
 		internal(w, e)
 		return
 	}
-	rows, e := s.Pool.Query(r.Context(), `SELECT id,action,payload FROM worker_commands WHERE state='pending' OR (state='running' AND updated_at<now()-interval '10 minutes') ORDER BY id LIMIT 20`)
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	if e := tx.QueryRow(r.Context(), `SELECT release_id FROM template_active WHERE id`).Scan(&release); e != nil {
+		internal(w, e)
+		return
+	}
+	rows, e := tx.Query(r.Context(), `SELECT id,action,payload FROM worker_commands WHERE state='pending' OR (state='running' AND updated_at<now()-interval '10 minutes') ORDER BY id LIMIT 20`)
 	if e != nil {
 		internal(w, e)
 		return
 	}
 	commands, e := collect(rows)
 	if e != nil {
+		internal(w, e)
+		return
+	}
+	if e := tx.Commit(r.Context()); e != nil {
 		internal(w, e)
 		return
 	}
