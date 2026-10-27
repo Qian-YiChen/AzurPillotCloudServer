@@ -240,7 +240,7 @@ func commandPayload(sources []json.RawMessage, templates []Template) []byte {
 	return b
 }
 func validateTemplate(t Template) error {
-	if !itemRE.MatchString(t.ItemID) || t.Name == "" || len(t.Name) > 128 || t.Series < 0 || t.Series > 100 || t.Rarity < 0 || t.Rarity > 6 {
+	if !lootItemRE.MatchString(t.ItemID) || t.Name == "" || len(t.Name) > 128 || t.Series < 0 || t.Series > 100 || t.Rarity < 0 || t.Rarity > 6 {
 		return fmt.Errorf("物品标识、名称、期数或稀有度无效")
 	}
 	switch t.Category {

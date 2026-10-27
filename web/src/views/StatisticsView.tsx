@@ -54,9 +54,9 @@ export function RecognitionOverview() {
   const results = useLoad(() => list<ResultRow>('/api/v1/admin/statistics/results?status=needs_review'), [pulse])
   const action = useAction()
   return <>
-    <div className="page-head"><div><h1>识别概览</h1><p className="muted">快速定位缺失模板和识别异常。每 30 秒刷新。</p></div><button className="ghost" onClick={() => { data.reload(); results.reload() }}>刷新</button></div>
+    <div className="page-head"><div><h1>识别概览</h1><p className="muted">按图片组计数，一组可含多张原图。快速定位缺失模板和识别异常，每 30 秒刷新。</p></div><button className="ghost" onClick={() => { data.reload(); results.reload() }}>刷新</button></div>
     {data.error && <p className="error">{data.error}</p>}
-    <div className="stat-grid">{[['已完成样本', data.data?.counts.complete ?? 0], ['待复核样本', data.data?.counts.needs_review ?? 0], ['待分类模板', data.data?.pending_candidates ?? 0]].map(([title, value]) => <section className="card stat" key={title}><p className="stat-title">{title}</p><p className="stat-main">{value}</p></section>)}</div>
+    <div className="stat-grid">{[['已完成图片组', data.data?.counts.complete ?? 0], ['待复核图片组', data.data?.counts.needs_review ?? 0], ['待分类模板', data.data?.pending_candidates ?? 0]].map(([title, value]) => <section className="card stat" key={title}><p className="stat-title">{title}</p><p className="stat-main">{value}</p></section>)}</div>
     <Card title="识别节点">
       {!data.data?.workers.length && <p className="muted">尚未收到 B 的心跳。配置识别节点后，状态会显示在这里。</p>}
       {data.data?.workers.map((worker) => <div className="recognition-worker" key={worker.id}><strong>{worker.id}</strong><span className={`pill ${worker.online ? 'pill-ok' : 'pill-err'}`}>{worker.online ? '在线' : '离线'}</span><span className="muted">待处理 {worker.payload.pending} · 模板版本 {worker.payload.release_id}</span></div>)}

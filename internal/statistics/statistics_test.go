@@ -104,6 +104,28 @@ func TestConfiguredSourceLimits(t *testing.T) {
 	}
 }
 
+func TestNumericEquipmentIdentifiers(t *testing.T) {
+	r := fixture(t)
+	r.Events[0].Items[0].Item = "533mm_Quintuple_Torpedo_Mount_T2"
+	if err := r.validate(); err != nil {
+		t.Fatal("rejected a numeric equipment identifier", err)
+	}
+	template := Template{ItemID: r.Events[0].Items[0].Item, Name: "鱼雷设计图", Category: "equipment_blueprint", Scene: "research"}
+	if err := validateTemplate(template); err != nil {
+		t.Fatal("rejected the corresponding template", err)
+	}
+	r.Events[0].Items = append(r.Events[0].Items, r.Events[0].Items[0])
+	if r.validate() == nil {
+		t.Fatal("accepted duplicate equipment rewards")
+	}
+	for _, name := range []string{"../item", "item/name", "", "_item"} {
+		r.Events[0].Items = []Item{{Item: name, Amount: 1}}
+		if r.validate() == nil {
+			t.Fatalf("accepted invalid item %q", name)
+		}
+	}
+}
+
 func TestAuthenticatedPreviewAndInvalidIndex(t *testing.T) {
 	s := service(t)
 	result := fixture(t)

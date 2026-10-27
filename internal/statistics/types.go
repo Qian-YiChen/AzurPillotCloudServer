@@ -10,6 +10,7 @@ import (
 
 var hashRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var itemRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,127}$`)
+var lootItemRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 var deviceRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var instanceRE = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
@@ -163,7 +164,7 @@ func (r Result) validateLimits(fileBytes, groupBytes int64) error {
 		seen := map[string]bool{}
 		for _, item := range e.Items {
 			k := item.Item + "/" + item.Tag
-			if !itemRE.MatchString(item.Item) || item.Amount < 1 || item.Amount > 1e9 || seen[k] {
+			if !lootItemRE.MatchString(item.Item) || item.Amount < 1 || item.Amount > 1e9 || seen[k] {
 				return fmt.Errorf("invalid/duplicate item")
 			}
 			switch item.Tag {
