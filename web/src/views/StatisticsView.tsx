@@ -40,7 +40,7 @@ function Commands() {
   const rows = useLoad(() => list<Command>('/api/v1/admin/worker-commands'), [pulse])
   return <Card title="试识别与重处理记录" extra={<button className="ghost" onClick={rows.reload}>刷新</button>}>
     {rows.error && <p className="error">{rows.error}</p>}
-    {!rows.data?.items.length && <p className="muted">尚无操作记录。保存分类后可试识别，发布模板后会重跑相关样本。</p>}
+    {!rows.data?.items.length && <p className="muted">尚无操作记录。保存分类后会自动发布模板，并重跑所有待复核上报。</p>}
     {rows.data?.items.map((cmd) => <details className="recognition-command" key={cmd.id}>
       <summary>#{cmd.id} · {cmd.action === 'test' ? '试识别' : '重新识别'} · {({ pending: '等待 B 接收', running: '正在处理', done: '已完成', failed: '处理失败' } as Record<string, string>)[cmd.state]}</summary>
       <pre>{JSON.stringify(cmd.result ?? {}, null, 2)}</pre>
@@ -50,13 +50,13 @@ function Commands() {
 
 export function RecognitionOverview() {
   const pulse = usePulse()
-  const data = useLoad(() => request<{ counts: Record<string, number>; pending_candidates: number; workers: { id: string; online: boolean; payload: { release_id: number; pending: number } }[] }>('GET', '/api/v1/admin/statistics/overview'), [pulse])
+  const data = useLoad(() => request<{ counts: Record<string, number>; image_counts: Record<string, number>; pending_candidates: number; workers: { id: string; online: boolean; payload: { release_id: number; pending: number } }[] }>('GET', '/api/v1/admin/statistics/overview'), [pulse])
   const results = useLoad(() => list<ResultRow>('/api/v1/admin/statistics/results?status=needs_review'), [pulse])
   const action = useAction()
   return <>
-    <div className="page-head"><div><h1>识别概览</h1><p className="muted">按图片组计数，一组可含多张原图。快速定位缺失模板和识别异常，每 30 秒刷新。</p></div><button className="ghost" onClick={() => { data.reload(); results.reload() }}>刷新</button></div>
+    <div className="page-head"><div><h1>识别概览</h1><p className="muted">一次上报可以包含多张截图。这里只统计 B 已回传的结果，B 排队中的任务单独显示。每 30 秒刷新。</p><a href="/">查看公开统计网站 →</a></div><button className="ghost" onClick={() => { data.reload(); results.reload() }}>刷新</button></div>
     {data.error && <p className="error">{data.error}</p>}
-    <div className="stat-grid">{[['已完成图片组', data.data?.counts.complete ?? 0], ['待复核图片组', data.data?.counts.needs_review ?? 0], ['待分类模板', data.data?.pending_candidates ?? 0]].map(([title, value]) => <section className="card stat" key={title}><p className="stat-title">{title}</p><p className="stat-main">{value}</p></section>)}</div>
+    <div className="stat-grid">{[['complete', '识别完成'], ['needs_review', '待复核']].map(([status, title]) => <section className="card stat" key={status}><p className="stat-title">{title}</p><p className="stat-main">{data.data?.image_counts[status] ?? 0}<small className="dim"> 张图</small></p><p className="muted">来自 {data.data?.counts[status] ?? 0} 次上报</p></section>)}<section className="card stat"><p className="stat-title">待分类模板</p><p className="stat-main">{data.data?.pending_candidates ?? 0}</p><p className="muted">分类保存后自动重识别</p></section></div>
     <Card title="识别节点">
       {!data.data?.workers.length && <p className="muted">尚未收到 B 的心跳。配置识别节点后，状态会显示在这里。</p>}
       {data.data?.workers.map((worker) => <div className="recognition-worker" key={worker.id}><strong>{worker.id}</strong><span className={`pill ${worker.online ? 'pill-ok' : 'pill-err'}`}>{worker.online ? '在线' : '离线'}</span><span className="muted">待处理 {worker.payload.pending} · 模板版本 {worker.payload.release_id}</span></div>)}
@@ -91,21 +91,21 @@ export function TemplateCandidates() {
     return '预览按需从 123 盘读取，服务器不长期保存原图'
   })
   return <>
-    <div className="page-head"><div><h1>待分类模板</h1><p className="muted">确认未知图标的物品归属，补齐模板后重新识别。</p></div><label>筛选状态<select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="pending">待分类</option><option value="assigned">已分类</option><option value="ignored">已忽略</option><option value="">全部</option></select></label></div>
+    <div className="page-head"><div><h1>待分类模板</h1><p className="muted">保存分类会自动发布模板，并重识别所有待复核截图，无需等待下一轮派发。</p></div><div className="form-actions"><button className="ghost" disabled={action.running} onClick={() => void action.run(async () => { const result = await request<{ queued_samples: number }>('POST', '/api/v1/admin/statistics/reprocess-unresolved'); return `已新增 ${result.queued_samples} 次重识别，已排队的任务自动合并。进度见下方记录。` })}>一键重新识别</button><label>筛选状态<select value={filter} onChange={(e) => setFilter(e.target.value)}><option value="pending">待分类</option><option value="assigned">已分类</option><option value="ignored">已忽略</option><option value="">全部</option></select></label></div></div>
     {rows.error && <p className="error">{rows.error}</p>}
     <Feedback message={action.message} />
     {!rows.loading && !rows.data?.items.length && <Card title="当前没有候选模板"><p className="muted">B 发现匹配不到的物品后，会自动提取图标并附上来源。候选需要人工确认后才能发布。</p></Card>}
     <div className="template-layout"><div className="candidate-grid">{rows.data?.items.map((candidate) => <button className={`candidate-card ${selected?.id === candidate.id ? 'selected' : ''}`} key={candidate.id} onClick={() => choose(candidate)}><img src={`data:image/png;base64,${candidate.image}`} alt="待分类的物品图标" /><strong>{candidate.scene === 'research' ? '科研' : '通用掉落'}</strong><span>{candidate.occurrences} 次出现 · {candidate.blocked_samples} 份关联样本</span><span className="muted">{candidate.metadata.server ?? ''} · {({ pending: '待分类', assigned: '已分类', ignored: '已忽略' } as Record<string, string>)[candidate.status]}</span></button>)}</div>
       {selected && <Card title="分类与归属">
-        <form className="stack" onSubmit={(e) => { e.preventDefault(); void action.run(async () => { await request('PATCH', `/api/v1/admin/template-candidates/${selected.id}`, { status: 'assigned', template: form }); rows.reload(); return '分类已保存为草稿，可试识别后到模板库发布' }) }}>
+        <form className="stack" onSubmit={(e) => { e.preventDefault(); void action.run(async () => { const result = await request<{ release_id: number; queued_samples: number }>('PATCH', `/api/v1/admin/template-candidates/${selected.id}`, { status: 'assigned', template: form }); rows.reload(); known.reload(); return `分类已保存并发布版本 ${result.release_id}，新增 ${result.queued_samples} 次重识别，已有待处理任务自动合并。B 将在下一次心跳接收。` }) }}>
           <img className="candidate-large" src={`data:image/png;base64,${selected.image}`} alt="当前候选模板" />
-          <label>物品标识<input required pattern="[A-Za-z][A-Za-z0-9_.-]{0,127}" placeholder="例如 BlueprintValparaiso" value={form.item_id} onChange={(e) => setForm({ ...form, item_id: e.target.value })} /><span className="muted">填写已有物品标识，可将不同外观归到同一物品。</span></label>
+          <label>物品标识<input required pattern="[A-Za-z0-9][A-Za-z0-9_. \-]{0,127}" placeholder="例如 BlueprintValparaiso" value={form.item_id} onChange={(e) => setForm({ ...form, item_id: e.target.value })} /><span className="muted">填写已有物品标识，可将不同外观归到同一物品。</span></label>
           <label>显示名称<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label>物品分类<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{Object.entries(categories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
           <label>适用统计<select value={form.scene} onChange={(e) => setForm({ ...form, scene: e.target.value })}><option value="all">科研与通用掉落</option><option value="research">仅科研</option><option value="drop">仅通用掉落</option></select></label>
           <div className="form-row"><label>稀有度（0 表示未指定）<input type="number" min="0" max="6" value={form.rarity} onChange={(e) => setForm({ ...form, rarity: Number(e.target.value) })} /></label><label>物品所属期数（0 表示不分期）<input type="number" min="0" max="100" value={form.series} onChange={(e) => setForm({ ...form, series: Number(e.target.value) })} /></label></div>
           <p className="muted">项目期数与物品所属期数独立；物资等消耗品可以不分期。</p>
-          <button type="submit" disabled={action.running}>保存分类</button>
+          <button type="submit" disabled={action.running}>保存分类并自动重识别</button>
           <div className="form-actions"><button type="button" className="ghost" disabled={action.running} onClick={() => void action.run(async () => { const result = await request<{ command_id: number }>('POST', '/api/v1/admin/templates/test', { ids: [selected.id] }); return `已登记试识别 #${result.command_id}，结果见下方记录` })}>试识别关联样本</button><button type="button" className="ghost" disabled={action.running} onClick={() => void action.run(async () => { await request('PATCH', `/api/v1/admin/template-candidates/${selected.id}`, { status: 'ignored', template: form }); setSelected(null); rows.reload(); return '已忽略候选' })}>忽略无效图</button><button type="button" className="ghost" disabled={action.running || !source} onClick={() => void showPreview()}>查看原始帧</button></div>
         </form>
         {preview && <img className="source-preview" src={preview} alt="候选所在的原始截图帧" />}

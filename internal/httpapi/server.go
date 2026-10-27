@@ -127,6 +127,7 @@ func New(deps Deps) *Server {
 	mux.Handle("GET /admin", http.RedirectHandler("/admin/", http.StatusPermanentRedirect))
 	if deps.AdminUI != nil {
 		mux.Handle("GET /admin/", deps.AdminUI)
+		mux.Handle("GET /{$}", deps.AdminUI)
 	}
 	// 兜底：统一 404 错误信封。
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

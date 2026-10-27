@@ -206,6 +206,15 @@ func TestAdminUIRoutes(t *testing.T) {
 			t.Fatalf("期望 200 与入口页: %d %s", rec.Code, rec.Body.String())
 		}
 	})
+	t.Run("公开统计首页可访问且不接管未知API", func(t *testing.T) {
+		rec := get(srv, "/", nil)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/html") {
+			t.Fatalf("expected public SPA entry: %d %s", rec.Code, rec.Body.String())
+		}
+		if rec := get(srv, "/api/does-not-exist", nil); rec.Code != http.StatusNotFound {
+			t.Fatalf("unknown API fell through to SPA: %d", rec.Code)
+		}
+	})
 	t.Run("未挂载前端时 404", func(t *testing.T) {
 		srv2, _ := newTestServer(t, &fakeBackend{}, nil)
 		rec := get(srv2, "/admin/", nil)

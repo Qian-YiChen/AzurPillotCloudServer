@@ -106,6 +106,12 @@ func TestConfiguredSourceLimits(t *testing.T) {
 
 func TestNumericEquipmentIdentifiers(t *testing.T) {
 	r := fixture(t)
+	for _, name := range []string{"Complete RepairPack", "TripleComplete RepairPack", "533mm_Quintuple_Torpedo_Mount_T2"} {
+		r.Events[0].Items[0].Item = name
+		if err := r.validate(); err != nil {
+			t.Fatalf("rejected an existing Alas resource identifier %q: %v", name, err)
+		}
+	}
 	r.Events[0].Items[0].Item = "533mm_Quintuple_Torpedo_Mount_T2"
 	if err := r.validate(); err != nil {
 		t.Fatal("rejected a numeric equipment identifier", err)
@@ -287,6 +293,17 @@ func TestCandidateClassificationPublicationAndRollback(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatal(rec.Body.String())
 	}
+	var activation struct {
+		Release int64 `json:"release_id"`
+		Queued  int64 `json:"queued_samples"`
+	}
+	if e := json.Unmarshal(rec.Body.Bytes(), &activation); e != nil || activation.Release < 1 || activation.Queued < 1 {
+		t.Fatal("classification did not automatically publish and queue unresolved samples", rec.Body.String(), e)
+	}
+	var active int64
+	if e := s.Pool.QueryRow(context.Background(), `SELECT release_id FROM template_active WHERE id`).Scan(&active); e != nil || active != activation.Release {
+		t.Fatal("classification and active release were not committed together", active, e)
+	}
 	rec = call(t, s, "POST", "/api/v1/admin/templates/test", "admin-token", map[string]any{"ids": []string{id}})
 	if rec.Code != 202 {
 		t.Fatal(rec.Body.String())
@@ -326,3 +343,47 @@ func TestCandidateClassificationPublicationAndRollback(t *testing.T) {
 	}
 }
 func jsonNumber(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+func TestReprocessUnresolvedMergesConcurrentClicks(t *testing.T) {
+	s := service(t)
+	unresolved := fixture(t)
+	unresolved.Status = "needs_review"
+	unresolved.Diagnostics = []string{"unknown_project_without_candidate"}
+	invalid := fixture(t)
+	invalid.Status, invalid.Events = "invalid", nil
+	invalid.Diagnostics = []string{"duplicate_research_list_capture"}
+	complete := fixture(t)
+	for _, result := range []Result{unresolved, invalid, complete} {
+		if _, e := s.Apply(context.Background(), result); e != nil {
+			t.Fatal(e)
+		}
+	}
+	if rec := call(t, s, "POST", "/api/v1/admin/statistics/reprocess-unresolved", "", nil); rec.Code != 401 {
+		t.Fatalf("unprotected bulk reprocessing: %d", rec.Code)
+	}
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			if rec := call(t, s, "POST", "/api/v1/admin/statistics/reprocess-unresolved", "admin-token", nil); rec.Code != 202 {
+				t.Error(rec.Body.String())
+			}
+		})
+	}
+	wg.Wait()
+	for _, result := range []Result{unresolved, invalid, complete} {
+		var count int
+		e := s.Pool.QueryRow(context.Background(), `SELECT count(*) FROM worker_commands WHERE action='reprocess' AND payload->'sources' @> $1::jsonb`, "[{\"sha256\":\""+result.SHA256+"\"}]").Scan(&count)
+		want := 0
+		if result.Status == "needs_review" {
+			want = 1
+		}
+		if e != nil || count != want {
+			t.Fatalf("%s: got %d commands, want %d: %v", result.Status, count, want, e)
+		}
+	}
+	// Count original files and submissions separately without breaking old clients.
+	rec := call(t, s, "GET", "/api/v1/admin/statistics/overview", "admin-token", nil)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"image_counts"`) || !strings.Contains(rec.Body.String(), `"counts"`) {
+		t.Fatal(rec.Body.String())
+	}
+}

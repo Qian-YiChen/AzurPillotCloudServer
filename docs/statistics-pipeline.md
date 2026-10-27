@@ -34,7 +34,7 @@ C 的两个域名通过黄云 A/AAAA 直接回源公网 Nginx；反代由服务�
 2. B 按其 README 配置 `STATISTICS_URL`、相同 `STATISTICS_TOKEN`、123 盘开放平台凭据和可用的 `ALAS_ROOT`/`ALAS_PYTHON`。设置 `UPLOADER_WS_URL` 主动连接 A，应用层使用 `WORKER_TOKEN` 鉴权。A 只有 HTTP/NAT 入口时，通过 [SSH 本地转发](https://github.com/wess09/AzurPilotStatsWorker/blob/main/deploy/reverse-ssh.md) 加密此连接；无需新增公网映射。B 的 Cloudflare Tunnel 仍用于 C 的预览接口。
 3. A 配置相同 `WORKER_TOKEN`、`WORKER_MODE=reverse`、`BATCH_INTERVAL=30m` 和 123 盘凭据，启动两路上传进程。经过 Cloudflare Tunnel 时，客户端使用 `POST /api/v1/uploads/init` 登记完整元数据，逐文件 `PUT /api/v1/uploads/{upload_id}/files/{index}`，最后 `POST /api/v1/uploads/{upload_id}/complete`。每个图片请求最多 10 MiB，整组仍可达 500 MiB；具体重试协议见 [A 的上传文档](https://github.com/wess09/AzurPilotUploadServer#上传协议)。兼容的整组 multipart 请求需要允许至少 502 MiB 的 HTTPS 入口，不能直接经过免费套餐的 100 MB 请求上限。
 4. C 若要按需查看原始帧，配置 `RECOGNIZER_URL=https://B域名`、`WORKER_TOKEN`。若 B 还经过 Cloudflare Access，必须让该服务请求通过相应 Access 策略。
-5. 打开 `/admin/` 的“识别概览”“待分类模板”“模板库”，确认 B 在线，先试识别再发布。
+5. 打开 `/admin/` 的“识别概览”“待分类模板”“模板库”，确认 B 在线。分类保存后会自动发布并重识别；首页 `/` 提供无需登录的公开统计网站。
 
 单文件和单组大小限制可通过 `MAX_FILE_BYTES / MAX_GROUP_BYTES` 调整；三个节点应使用相同设置，默认分别为 10 MiB 和 500 MiB。A 的接收并发、云盘上传并发和暂存配额独立配置。
 
@@ -103,6 +103,8 @@ C 按组哈希事务串行：初版从 1 开始，更正必须是当前版本 +1
 
 ## 统计查询
 
+公开网站为 `https://stats.azurpilot.com/`，提供科研项目分布、48 个半小时时段出现占比和通用掉落明细，支持时间范围、区服、项目期数、科研倾向和场景筛选。公开页面只调用公开查询 API，不读取管理 Token。管理后台的“公开统计网站”链接可直接进入。
+
 - `GET /api/v2/get/research`
 - `GET /api/v2/get/drop`
 
@@ -125,11 +127,16 @@ B 自动提取未知图标，小图内容 SHA-256 为候选 ID；相同来源/�
 | 分类或忽略 | `PATCH /api/v1/admin/template-candidates/{id}` |
 | 发布、回滚 | `POST /api/v1/admin/templates/publish`、`/templates/rollback` |
 | 草稿试识别、重跑 | `POST /api/v1/admin/templates/test`、`/statistics/reprocess`，正文 `{"ids":["样本或候选哈希"]}` |
+| 一键重新识别全部待复核上报 | `POST /api/v1/admin/statistics/reprocess-unresolved`，无需正文 |
 | 原始帧流式预览 | `GET /api/v1/admin/statistics/preview/{sha256}/{index}?frame=0` |
 
 分类正文为 `{"status":"assigned","template":{"item_id":"Coins","name":"物资","category":"consumable","rarity":0,"series":0,"scene":"all","enabled":true}}`；忽略用 `status=ignored`。类别为 `ship_blueprint / equipment_blueprint / consumable / other`；模板场景 `all` 可跨科研和通用掉落使用，也可限制为 `research / drop`。
 
-发布冻结整个模板包和 SHA-256，切换活动版本并登记待复核及使用过在线模板的样本重跑。回滚复制旧内容生成新版本，保持版本号递增；草稿不随回滚改动。B 通过 `POST /internal/v1/worker/sync` 每 30 秒上报心跳/指令进度并获取活动版本和指令，通过 `GET /internal/v1/template-releases/{id}` 下载并验包。每个识别任务固定模板快照，试识别不写正式结果。
+分类保存会在同一事务中更新模板、冻结完整模板包和 SHA-256、切换活动版本，并登记所有待复核及使用过在线模板的样本重跑，返回 `release_id / queued_samples`。不需要再手动发布。已确认无效的截图不因补模板而重跑。待分类页的“一键重新识别”只重跑待复核上报，无需改动模板；待处理指令会合并，B 正在执行的任务允许在新版本下再次运行。
+
+回滚复制旧内容生成新版本，保持版本号递增；当前模板编辑值不随回滚改动。B 通过 `POST /internal/v1/worker/sync` 每 30 秒上报心跳/指令进度并获取活动版本和指令，通过 `GET /internal/v1/template-releases/{id}` 下载并验包。重处理不等待 30 分钟上传调度；每个识别任务固定模板快照，试识别不写正式结果。
+
+识别概览的 `counts` 按唯一上报计数，`image_counts` 按上报包含的原图数量计数；一次上报可以含多张图。这两个数字只覆盖 B 已回传的结果，B 本地排队任务另行显示。正式统计中的项目槽位和完成事件也不是图片张数。
 
 ## 验证
 

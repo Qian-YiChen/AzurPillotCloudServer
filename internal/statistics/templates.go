@@ -85,6 +85,12 @@ func (s *Service) classify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
+	// Take the publication lock before editing, so each snapshot includes all
+	// classifications committed before it and cannot overwrite a newer snapshot.
+	if _, e = tx.Exec(r.Context(), `SELECT id FROM template_active WHERE id FOR UPDATE`); e != nil {
+		internal(w, e)
+		return
+	}
 	var image string
 	e = tx.QueryRow(r.Context(), `SELECT image FROM template_candidates WHERE id=$1 FOR UPDATE`, id).Scan(&image)
 	if errors.Is(e, pgx.ErrNoRows) {
@@ -109,14 +115,37 @@ func (s *Service) classify(w http.ResponseWriter, r *http.Request) {
 		internal(w, e)
 		return
 	}
+	ts, e := readTemplates(r.Context(), tx)
+	if e != nil {
+		internal(w, e)
+		return
+	}
+	packageJSON, e := templatePackage(ts)
+	if e != nil {
+		fail(w, 400, "VALIDATION_ERROR", e.Error())
+		return
+	}
+	releaseID, queued, e := releaseInTx(r.Context(), tx, packageJSON)
+	if e != nil {
+		internal(w, e)
+		return
+	}
 	if e = tx.Commit(r.Context()); e != nil {
 		internal(w, e)
 		return
 	}
-	output(w, 200, map[string]any{"saved": true})
+	output(w, 200, map[string]any{"saved": true, "release_id": releaseID, "queued_samples": queued})
 }
 func (s *Service) templates(ctx context.Context) ([]Template, error) {
-	rows, e := s.Pool.Query(ctx, `SELECT id,item_id,name,category,rarity,series,scene,enabled,image FROM stat_templates ORDER BY id LIMIT 2001`)
+	return readTemplates(ctx, s.Pool)
+}
+
+type templateReader interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func readTemplates(ctx context.Context, reader templateReader) ([]Template, error) {
+	rows, e := reader.Query(ctx, `SELECT id,item_id,name,category,rarity,series,scene,enabled,image FROM stat_templates ORDER BY id LIMIT 2001`)
 	if e != nil {
 		return nil, e
 	}
@@ -130,6 +159,17 @@ func (s *Service) templates(ctx context.Context) ([]Template, error) {
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+func templatePackage(ts []Template) ([]byte, error) {
+	if len(ts) > 2000 {
+		return nil, errors.New("单版本最多 2000 个模板")
+	}
+	b, e := json.Marshal(ts)
+	if e == nil && len(b) > 32<<20 {
+		e = errors.New("模板包超过 32 MiB")
+	}
+	return b, e
 }
 func (s *Service) sources(ctx context.Context, ids []string) ([]json.RawMessage, error) {
 	rows, e := s.Pool.Query(ctx, `SELECT DISTINCT r.payload->'source' FROM stat_results r WHERE cardinality($1::text[])=0 OR r.sha256=ANY($1::text[]) OR r.sha256 IN(SELECT sample_sha256 FROM candidate_sources WHERE candidate_id=ANY($1::text[])) OR (r.payload->'used_templates') ?| $1::text[] LIMIT 1001`, ids)
@@ -148,7 +188,6 @@ func (s *Service) sources(ctx context.Context, ids []string) ([]json.RawMessage,
 	return out, rows.Err()
 }
 func (s *Service) createRelease(ctx context.Context, payload []byte) (int64, error) {
-	sum := sha256.Sum256(payload)
 	tx, e := s.Pool.Begin(ctx)
 	if e != nil {
 		return 0, e
@@ -158,16 +197,8 @@ func (s *Service) createRelease(ctx context.Context, payload []byte) (int64, err
 	if _, e = tx.Exec(ctx, `SELECT id FROM template_active WHERE id FOR UPDATE`); e != nil {
 		return 0, e
 	}
-	var id int64
-	if e = tx.QueryRow(ctx, `INSERT INTO template_releases(sha256,payload) VALUES($1,$2) RETURNING id`, hex.EncodeToString(sum[:]), payload).Scan(&id); e != nil {
-		return 0, e
-	}
-	if _, e = tx.Exec(ctx, `UPDATE template_active SET release_id=$1 WHERE id`, id); e != nil {
-		return 0, e
-	}
-	// Reprocess every current unresolved sample, and samples that previously
-	// used managed templates. Each source is durable; batching happens in B.
-	if _, e = tx.Exec(ctx, `INSERT INTO worker_commands(action,payload) SELECT 'reprocess',jsonb_build_object('sources',jsonb_build_array(payload->'source'),'templates','[]'::jsonb) FROM stat_results WHERE status<>'complete' OR CASE WHEN jsonb_typeof(payload->'used_templates')='array' THEN jsonb_array_length(payload->'used_templates') ELSE 0 END>0`); e != nil {
+	id, _, e := releaseInTx(ctx, tx, payload)
+	if e != nil {
 		return 0, e
 	}
 	if e = tx.Commit(ctx); e != nil {
@@ -175,31 +206,87 @@ func (s *Service) createRelease(ctx context.Context, payload []byte) (int64, err
 	}
 	return id, nil
 }
+
+func releaseInTx(ctx context.Context, tx pgx.Tx, payload []byte) (int64, int64, error) {
+	sum := sha256.Sum256(payload)
+	var e error
+	var id int64
+	if e = tx.QueryRow(ctx, `INSERT INTO template_releases(sha256,payload) VALUES($1,$2) RETURNING id`, hex.EncodeToString(sum[:]), payload).Scan(&id); e != nil {
+		return 0, 0, e
+	}
+	if _, e = tx.Exec(ctx, `UPDATE template_active SET release_id=$1 WHERE id`, id); e != nil {
+		return 0, 0, e
+	}
+	// Reprocess every current unresolved sample, and samples that previously
+	// used managed templates. Each source is durable; batching happens in B.
+	// Invalid captures (including duplicate list frames) cannot be fixed by an
+	// icon template. Every needs_review sample is retried, even without a candidate.
+	queued, e := queueUnresolved(ctx, tx, true)
+	if e != nil {
+		return 0, 0, e
+	}
+	return id, queued, nil
+}
+
+func queueUnresolved(ctx context.Context, tx pgx.Tx, includeManaged bool) (int64, error) {
+	queued, e := tx.Exec(ctx, `INSERT INTO worker_commands(action,payload) SELECT 'reprocess',jsonb_build_object('sources',jsonb_build_array(r.payload->'source'),'templates','[]'::jsonb) FROM stat_results r WHERE (status='needs_review' OR ($1 AND CASE WHEN jsonb_typeof(r.payload->'used_templates')='array' THEN jsonb_array_length(r.payload->'used_templates') ELSE 0 END>0)) AND NOT EXISTS (SELECT 1 FROM worker_commands c WHERE c.action='reprocess' AND c.state='pending' AND c.payload->'sources' @> jsonb_build_array(r.payload->'source'))`, includeManaged)
+	return queued.RowsAffected(), e
+}
+
+func (s *Service) reprocessUnresolved(w http.ResponseWriter, r *http.Request) {
+	tx, e := s.Pool.Begin(r.Context())
+	if e != nil {
+		internal(w, e)
+		return
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	// Share the publication lock to merge repeated clicks and classification jobs.
+	if _, e = tx.Exec(r.Context(), `SELECT id FROM template_active WHERE id FOR UPDATE`); e != nil {
+		internal(w, e)
+		return
+	}
+	queued, e := queueUnresolved(r.Context(), tx, false)
+	if e != nil {
+		internal(w, e)
+		return
+	}
+	if e = tx.Commit(r.Context()); e != nil {
+		internal(w, e)
+		return
+	}
+	output(w, 202, map[string]any{"queued_samples": queued})
+}
 func (s *Service) publish(w http.ResponseWriter, r *http.Request) {
-	ts, e := s.templates(r.Context())
+	tx, e := s.Pool.Begin(r.Context())
 	if e != nil {
 		internal(w, e)
 		return
 	}
-	if len(ts) > 2000 {
-		fail(w, 400, "VALIDATION_ERROR", "单版本最多 2000 个模板")
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	if _, e = tx.Exec(r.Context(), `SELECT id FROM template_active WHERE id FOR UPDATE`); e != nil {
+		internal(w, e)
 		return
 	}
-	b, e := json.Marshal(ts)
+	ts, e := readTemplates(r.Context(), tx)
 	if e != nil {
 		internal(w, e)
 		return
 	}
-	if len(b) > 32<<20 {
-		fail(w, 400, "VALIDATION_ERROR", "模板包超过 32 MiB")
+	b, e := templatePackage(ts)
+	if e != nil {
+		fail(w, 400, "VALIDATION_ERROR", e.Error())
 		return
 	}
-	id, e := s.createRelease(r.Context(), b)
+	id, queued, e := releaseInTx(r.Context(), tx, b)
 	if e != nil {
 		internal(w, e)
 		return
 	}
-	output(w, 200, map[string]any{"release_id": id})
+	if e = tx.Commit(r.Context()); e != nil {
+		internal(w, e)
+		return
+	}
+	output(w, 200, map[string]any{"release_id": id, "queued_samples": queued})
 }
 func (s *Service) rollback(w http.ResponseWriter, r *http.Request) {
 	var b struct {

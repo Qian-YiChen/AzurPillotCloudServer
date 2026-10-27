@@ -71,6 +71,7 @@ export function App() {
       <div className="layout">
         <aside className="sidebar">
           <nav>
+            <a className="public-site-link" href="/">公开统计网站 ↗</a>
             <p className="nav-group">运营管理</p>
             {SECTIONS.map((s) => (
               <button

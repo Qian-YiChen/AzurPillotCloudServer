@@ -105,4 +105,5 @@ func (s *Service) Register(m *http.ServeMux) {
 	m.HandleFunc("POST /api/v1/admin/templates/rollback", s.auth(s.Admin, s.rollback))
 	m.HandleFunc("POST /api/v1/admin/templates/test", s.auth(s.Admin, s.testTemplate))
 	m.HandleFunc("POST /api/v1/admin/statistics/reprocess", s.auth(s.Admin, s.reprocess))
+	m.HandleFunc("POST /api/v1/admin/statistics/reprocess-unresolved", s.auth(s.Admin, s.reprocessUnresolved))
 }

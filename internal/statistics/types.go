@@ -10,7 +10,9 @@ import (
 
 var hashRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var itemRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]{0,127}$`)
-var lootItemRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+
+// Alas resource identifiers include names such as "Complete RepairPack".
+var lootItemRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_. -]{0,127}$`)
 var deviceRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var instanceRE = regexp.MustCompile(`^[0-9a-f]{16}$`)
 

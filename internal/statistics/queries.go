@@ -176,13 +176,15 @@ func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	if strings.HasSuffix(path, "overview") {
 		counts := map[string]int64{}
+		images := map[string]int64{}
 		for _, name := range []string{"complete", "needs_review", "invalid"} {
-			var n int64
-			if e := s.Pool.QueryRow(r.Context(), `SELECT count(*) FROM stat_results WHERE status=$1`, name).Scan(&n); e != nil {
+			var n, files int64
+			if e := s.Pool.QueryRow(r.Context(), `SELECT count(*),COALESCE(sum(jsonb_array_length(payload->'source'->'files')),0)::bigint FROM stat_results WHERE status=$1`, name).Scan(&n, &files); e != nil {
 				internal(w, e)
 				return
 			}
 			counts[name] = n
+			images[name] = files
 		}
 		var pending int64
 		if e := s.Pool.QueryRow(r.Context(), `SELECT count(*) FROM template_candidates WHERE status='pending'`).Scan(&pending); e != nil {
@@ -199,7 +201,7 @@ func (s *Service) adminList(w http.ResponseWriter, r *http.Request) {
 			internal(w, e)
 			return
 		}
-		output(w, 200, map[string]any{"counts": counts, "pending_candidates": pending, "workers": workers})
+		output(w, 200, map[string]any{"counts": counts, "image_counts": images, "pending_candidates": pending, "workers": workers})
 		return
 	}
 	queries := map[string]string{
