@@ -113,6 +113,10 @@ func New(deps Deps) *Server {
 	mux.HandleFunc("POST /api/v1/uploads/init", s.handleUploadGateway)
 	mux.HandleFunc("PUT /api/v1/uploads/{id}/files/{index}", s.handleUploadGateway)
 	mux.HandleFunc("POST /api/v1/uploads/{id}/complete", s.handleUploadGateway)
+	mux.HandleFunc("POST /api/v2/uploads/init", s.handleUploadGateway)
+	mux.HandleFunc("POST /api/v2/uploads/{id}/files/{index}/prepare", s.handleUploadGateway)
+	mux.HandleFunc("POST /api/v2/uploads/{id}/files/{index}/complete", s.handleUploadGateway)
+	mux.HandleFunc("POST /api/v2/uploads/{id}/complete", s.handleUploadGateway)
 	if deps.Statistics != nil {
 		deps.Statistics.Register(mux)
 	}

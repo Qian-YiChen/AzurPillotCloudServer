@@ -24,6 +24,10 @@ func TestUploadRedirectPreservesProtocolWithoutContactingA(t *testing.T) {
 		{"POST", "/api/v1/uploads/init"},
 		{"PUT", "/api/v1/uploads/11111111-1111-1111-1111-111111111111/files/0?test=1"},
 		{"POST", "/api/v1/uploads/11111111-1111-1111-1111-111111111111/complete"},
+		{"POST", "/api/v2/uploads/init"},
+		{"POST", "/api/v2/uploads/11111111-1111-1111-1111-111111111111/files/0/prepare"},
+		{"POST", "/api/v2/uploads/11111111-1111-1111-1111-111111111111/files/0/complete"},
+		{"POST", "/api/v2/uploads/11111111-1111-1111-1111-111111111111/complete"},
 	} {
 		t.Run(c.method+c.path, func(t *testing.T) {
 			r := httptest.NewRequest(c.method, c.path, nil)
@@ -40,6 +44,30 @@ func TestUploadRedirectPreservesProtocolWithoutContactingA(t *testing.T) {
 				t.Fatal("upload routing must not be cached")
 			}
 		})
+	}
+}
+
+func TestV2UploadRedirectAllowsHashManifestsAndRejectsImageBodies(t *testing.T) {
+	s, _ := newTestServer(t, &fakeBackend{}, nil)
+	s.deps.Cfg.LegacyUploadURL = "http://192.0.2.1:30207/api/upload"
+	for _, tc := range []struct {
+		path string
+		size int
+		want int
+	}{
+		{"init", 128 << 10, 307},
+		{"init", (256 << 10) + 1, 413},
+		{"11111111-1111-1111-1111-111111111111/files/0/prepare", 17 << 10, 413},
+		{"11111111-1111-1111-1111-111111111111/files/no/prepare", 0, 400},
+	} {
+		r := httptest.NewRequest("POST", "/api/v2/uploads/"+tc.path, nil)
+		r.ContentLength = int64(tc.size)
+		r.Body = unreadUploadBody{t}
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		if w.Code != tc.want {
+			t.Fatalf("%s: %d %s", tc.path, w.Code, w.Body)
+		}
 	}
 }
 

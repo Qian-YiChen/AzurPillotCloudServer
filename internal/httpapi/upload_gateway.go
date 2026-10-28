@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // Discover A at the common API origin without requiring a network route from C
@@ -14,15 +15,20 @@ func (s *Server) handleUploadGateway(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := int64(16 << 10)
-	if r.Method == http.MethodPut {
+	if r.URL.Path == "/api/v2/uploads/init" {
+		limit = 256 << 10
+	}
+	if r.Method == http.MethodPut || r.PathValue("index") != "" {
 		index, err := strconv.Atoi(r.PathValue("index"))
 		if err != nil || index < 0 || index >= 1000 {
 			writeError(w, r, errValidation("无效文件序号", "index"))
 			return
 		}
-		limit = s.deps.Cfg.StatisticsFileBytes
-		if limit == 0 {
-			limit = 10 << 20
+		if !strings.HasPrefix(r.URL.Path, "/api/v2/uploads/") {
+			limit = s.deps.Cfg.StatisticsFileBytes
+			if limit == 0 {
+				limit = 10 << 20
+			}
 		}
 	}
 	if r.ContentLength > limit {
