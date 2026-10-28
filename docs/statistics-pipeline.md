@@ -14,6 +14,8 @@
 
 AP 先请求 `https://api.azurpilot.com/api/v1/uploads/init`，C 返回 307 指向 A 的公网入口。AP 随后直接向 A 登记、上传文件和完成图片组；图片正文不经过 C。A 与 B 通过现有 WebSocket 交换任务，B 将识别结果提交 C，因此 A、C 不需要彼此连通。
 
+新 AP 默认使用 `/api/v2/uploads/init`，同样由 C 307 到 A。v2 只通过 A 登记元数据和申请预签名地址，图片由 AP 直接上传 123 盘；A 向云盘核验 MD5、大小和目标目录后才进入既有半小时派发队列。C 同时支持 v2 的 `files/{index}/prepare`、`files/{index}/complete` 和组 `complete` 重定向，仍不访问 A 或读取请求正文。v1 和历史上传入口继续支持旧客户端；B/C 的结果格式与采集时间不变。完整契约见 [A 的 v2 上传协议](https://github.com/wess09/AzurPilotUploadServer#上传协议)。
+
 ## 配置与部署顺序
 
 对外 API 统一使用 `https://api.azurpilot.com`，管理后台继续使用 `https://stats.azurpilot.com/admin/`。A 的 `STATISTICS_PUBLIC_URL` 和 B 的 `STATISTICS_URL` 指向统一 API 域名。新旧域名共享 C 服务和数据库；B 的预览入口仍由 `RECOGNIZER_URL` 单独配置。
