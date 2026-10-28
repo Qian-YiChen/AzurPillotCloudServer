@@ -182,8 +182,13 @@ npm run build    # 产物输出到 internal/adminui/dist，随后 go build 完�
 | `LISTEN_ADDR` | `:8080` | HTTP 监听地址 |
 | `DATABASE_URL` | 本机 PostgreSQL | libpq 连接串 |
 | `ADMIN_TOKEN` | 空（关闭） | 管理接口 Bearer Token |
-| `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | `20` / `40` | 按 IP 令牌桶 |
+| `RATE_LIMIT_RPS` / `RATE_LIMIT_BURST` | `5000` / `8000` | 每个来源 IP、请求类别的每秒请求数 / 突发请求数 |
 | `CACHE_TTL` / `CACHE_REFRESH_INTERVAL` | `8s` / `5s` | 网关缓存 |
 | `DEDUP_TTL` | `24h` | CL1 去重保留 |
 | `CF_ACCOUNT_ID` / `CF_API_TOKEN` | 空 | Cloudflare 发布凭据 |
 | `PUBLISH_DIR` | `public` | 本地静态发布目录 |
+
+公开接口、管理接口（含 `/admin/` 资源）和 `/internal/` Worker 接口各自使用独立额度，
+`GET/HEAD /healthz` 不参与限流。5000/8000 表示每秒补充 5000 个请求令牌、最多积累 8000 个，
+不代表同时执行 8000 个数据库查询。来源 IP 使用直连地址；反代共用地址时，同类请求共享额度，
+不自动信任客户端提供的 `X-Forwarded-For`。超限仍返回 429 和 `Retry-After`，并记录访问日志。

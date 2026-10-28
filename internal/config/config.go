@@ -53,7 +53,7 @@ type Config struct {
 	// ShutdownGrace 为优雅停机的最长等待时间。
 	ShutdownGrace time.Duration
 
-	// RateLimitRPS 与 RateLimitBurst 为按客户端 IP 的令牌桶限流参数。
+	// RateLimitRPS 与 RateLimitBurst 为按来源 IP、请求类别独立的令牌桶参数。
 	RateLimitRPS   float64
 	RateLimitBurst int
 
@@ -95,8 +95,8 @@ func Load() (Config, error) {
 		LogLevel:                env("LOG_LEVEL", "info"),
 		RequestTimeout:          envDuration("REQUEST_TIMEOUT", 15*time.Second),
 		ShutdownGrace:           envDuration("SHUTDOWN_GRACE", 30*time.Second),
-		RateLimitRPS:            envFloat("RATE_LIMIT_RPS", 20),
-		RateLimitBurst:          envInt("RATE_LIMIT_BURST", 40),
+		RateLimitRPS:            envFloat("RATE_LIMIT_RPS", 5000),
+		RateLimitBurst:          envInt("RATE_LIMIT_BURST", 8000),
 		GatewayTimeout:          envDuration("GATEWAY_TIMEOUT", 10*time.Second),
 		CacheTTL:                envDuration("CACHE_TTL", 8*time.Second),
 		CacheRefreshInterval:    envDuration("CACHE_REFRESH_INTERVAL", 5*time.Second),

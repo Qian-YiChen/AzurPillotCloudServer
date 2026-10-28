@@ -62,13 +62,13 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
-// limiterEntry 记录每个客户端 IP 的令牌桶与最近活跃时间。
+// limiterEntry 记录每个来源 IP、请求类别的令牌桶与最近活跃时间。
 type limiterEntry struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time
 }
 
-// rateLimiter 是按客户端 IP 的限流器，附带空闲回收，
+// rateLimiter 是按来源 IP、请求类别的限流器，附带空闲回收，
 // 避免限流映射表无限增长（本身就是一种资源泄露）。
 type rateLimiter struct {
 	rps     float64
@@ -152,7 +152,7 @@ func (l *rateLimiter) allow(ip string) bool {
 	return lim.Allow()
 }
 
-// clientIP 解析直连地址；反代场景由部署层保证可信头。
+// clientIP 解析直连地址，不信任未经验证的代理头。
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -161,11 +161,22 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// rateLimitMiddleware 对每个请求执行按 IP 限流，超限返回 429 + Retry-After。
+// rateLimitMiddleware 将公开、管理和 Worker 请求分桶，避免反代共用来源 IP
+// 时 B 的集中上报挤占管理和查询额度。健康检查不消耗令牌。
 func (s *Server) rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r)
-		if !s.limiter.allow(ip) {
+		if r.URL.Path == "/healthz" && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		scope := "public"
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/internal/"):
+			scope = "worker"
+		case r.URL.Path == "/admin" || strings.HasPrefix(r.URL.Path, "/admin/") || strings.HasPrefix(r.URL.Path, "/api/v1/admin/"):
+			scope = "admin"
+		}
+		if !s.limiter.allow(scope + "\x00" + clientIP(r)) {
 			writeError(w, r, errRateLimited("1"))
 			return
 		}

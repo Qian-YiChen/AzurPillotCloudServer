@@ -140,8 +140,8 @@ func New(deps Deps) *Server {
 	})
 
 	handler := recoverMiddleware(s.logger, mux)
-	handler = logMiddleware(s.logger, handler)
 	handler = s.rateLimitMiddleware(handler)
+	handler = logMiddleware(s.logger, handler)
 	handler = timeoutMiddleware(s.requestTimeout, s.publishTimeout, handler)
 
 	s.http = &http.Server{
