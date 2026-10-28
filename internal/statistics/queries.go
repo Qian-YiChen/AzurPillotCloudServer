@@ -12,6 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// Bound response memory without rejecting ordinary cross-series summaries.
+// This counts aggregate rows, not source screenshots or individual events.
+const maxSummaryRows = 100000
+
 func collect(rows pgx.Rows) ([]map[string]any, error) {
 	defer rows.Close()
 	out := []map[string]any{}
@@ -100,6 +104,7 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 ), base AS (
  SELECT * FROM scope WHERE ($5='' OR scene=$5) AND ($6::int=0 OR series=$6) AND ($8::int=-1 OR focus_series=$8)
 ), filtered AS (SELECT * FROM base WHERE ($7='' OR project=$7)) `
+	rowLimit := fmt.Sprintf(" LIMIT %d", maxSummaryRows+1)
 	tx, e := s.Pool.BeginTx(r.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if e != nil {
 		internal(w, e)
@@ -107,7 +112,7 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = tx.Rollback(r.Context()) }()
 	if strings.HasSuffix(r.URL.Path, "/options") {
-		rows, err := tx.Query(r.Context(), filtered+`SELECT series,focus_series,scene,count(*) AS events,count(*) FILTER(WHERE event_type='refresh') AS appearances,count(*) FILTER(WHERE event_type<>'refresh') AS samples FROM scope GROUP BY series,focus_series,scene ORDER BY series DESC,focus_series DESC,scene LIMIT 10001`, args...)
+		rows, err := tx.Query(r.Context(), filtered+`SELECT series,focus_series,scene,count(*) AS events,count(*) FILTER(WHERE event_type='refresh') AS appearances,count(*) FILTER(WHERE event_type<>'refresh') AS samples FROM scope GROUP BY series,focus_series,scene ORDER BY series DESC,focus_series DESC,scene`+rowLimit, args...)
 		if err != nil {
 			internal(w, err)
 			return
@@ -117,7 +122,7 @@ func (s *Service) summary(w http.ResponseWriter, r *http.Request) {
 			internal(w, err)
 			return
 		}
-		if len(options) > 10000 {
+		if len(options) > maxSummaryRows {
 			fail(w, 400, "QUERY_TOO_BROAD", "请缩小筛选范围")
 			return
 		}
@@ -139,7 +144,7 @@ SELECT b.slot AS slot_index,to_char(make_time(b.slot/2,(b.slot%2)*30,0),'HH24:MI
  count(*) FILTER(WHERE b.event_type='refresh') AS appearances,count(*) FILTER(WHERE b.event_type<>'refresh') AS samples,
  t.appearances AS total_appearances,COALESCE((count(*) FILTER(WHERE b.event_type='refresh'))::float8/NULLIF(t.appearances,0),0) AS appearance_rate
 FROM bucketed b JOIN totals t USING(slot,series,focus_series) WHERE ($7='' OR b.project=$7)
-GROUP BY b.slot,b.series,b.focus_series,b.project,b.scene,t.appearances ORDER BY b.slot,b.series,b.focus_series,b.project,b.scene LIMIT 10001`, append(args, zone)...)
+GROUP BY b.slot,b.series,b.focus_series,b.project,b.scene,t.appearances ORDER BY b.slot,b.series,b.focus_series,b.project,b.scene`+rowLimit, append(args, zone)...)
 		if err != nil {
 			internal(w, err)
 			return
@@ -149,7 +154,7 @@ GROUP BY b.slot,b.series,b.focus_series,b.project,b.scene,t.appearances ORDER BY
 			internal(w, err)
 			return
 		}
-		if len(slots) > 10000 {
+		if len(slots) > maxSummaryRows {
 			fail(w, 400, "QUERY_TOO_BROAD", "请缩小时段筛选范围")
 			return
 		}
@@ -168,7 +173,7 @@ SELECT e.series,e.focus_series,e.project,e.scene,count(*) FILTER(WHERE e.event_t
  COALESCE(sum(e.duration_seconds) FILTER(WHERE e.event_type<>'refresh'),0)::bigint AS duration_seconds,
  t.appearances AS total_appearances,COALESCE((count(*) FILTER(WHERE e.event_type='refresh'))::float8/NULLIF(t.appearances,0),0) AS appearance_rate
 FROM filtered e JOIN totals t USING(series,focus_series)
-GROUP BY e.series,e.focus_series,e.project,e.scene,t.appearances ORDER BY e.series,e.focus_series,e.project,e.scene LIMIT 1001`, args...)
+GROUP BY e.series,e.focus_series,e.project,e.scene,t.appearances ORDER BY e.series,e.focus_series,e.project,e.scene`+rowLimit, args...)
 	if e != nil {
 		internal(w, e)
 		return
@@ -178,7 +183,7 @@ GROUP BY e.series,e.focus_series,e.project,e.scene,t.appearances ORDER BY e.seri
 		internal(w, e)
 		return
 	}
-	if len(groups) > 1000 {
+	if len(groups) > maxSummaryRows {
 		fail(w, 400, "QUERY_TOO_BROAD", "请缩小筛选范围")
 		return
 	}
@@ -192,7 +197,7 @@ SELECT e.series,e.focus_series,e.project,e.scene,i.item,i.tag,count(*) AS occurr
  CASE WHEN d.seconds>0 THEN round(COALESCE(sum(i.amount) FILTER(WHERE e.duration_seconds>0),0)::numeric*3600/d.seconds,6)::float8 ELSE NULL END AS amount_per_hour
 FROM filtered e JOIN stat_items i ON i.sha256=e.sha256 AND i.ordinal=e.ordinal JOIN denominators d USING(series,focus_series,project,scene)
 WHERE e.event_type<>'refresh' GROUP BY e.series,e.focus_series,e.project,e.scene,i.item,i.tag,d.samples,d.seconds,d.timed_samples
-ORDER BY e.series,e.focus_series,e.project,e.scene,i.item,i.tag LIMIT 1001`, args...)
+ORDER BY e.series,e.focus_series,e.project,e.scene,i.item,i.tag`+rowLimit, args...)
 	if e != nil {
 		internal(w, e)
 		return
@@ -202,7 +207,7 @@ ORDER BY e.series,e.focus_series,e.project,e.scene,i.item,i.tag LIMIT 1001`, arg
 		internal(w, e)
 		return
 	}
-	if len(items) > 1000 {
+	if len(items) > maxSummaryRows {
 		fail(w, 400, "QUERY_TOO_BROAD", "请缩小筛选范围")
 		return
 	}
